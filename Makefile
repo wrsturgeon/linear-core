@@ -24,6 +24,7 @@ _CoqProject
 $(MCOQ)
 $(MCOQ).conf
 $(OCAMLDIR)
+out*
 result
 *.aux
 *.d
@@ -44,7 +45,7 @@ define escape_str
 endef
 
 # Main target:
-ocaml/some-bullshit:
+ocaml/build:
 
 %: $(COQMK) .gitignore
 	+$(MAKE) $(MAKE_FLAGS) -f $< $@

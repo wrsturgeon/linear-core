@@ -26,14 +26,16 @@
         coq-pkgs = pkgs.coqPackages;
         inherit (coq-pkgs) coq;
         ocaml-pkgs = coq.ocamlPackages;
+        inherit (ocaml-pkgs) ocaml;
+        dune = ocaml-pkgs.dune_3;
         mmaps = coq-pkgs.mkCoqDerivation {
           pname = "mmaps";
           version = "main";
           src = mmaps-src;
         };
         propagatedBuildInputs = [ mmaps ];
-        buildInputs = with ocaml-pkgs; [
-          dune_3
+        buildInputs = [
+          dune
           ocaml
         ];
       in
@@ -49,7 +51,11 @@
         };
         devShells.default = pkgs.mkShell {
           inputsFrom = [ self.packages.${system}.default ];
-          packages = (with ocaml-pkgs; [ ocamlformat ]) ++ (with pkgs; [ gh ]);
+          packages =
+            (with ocaml-pkgs; [
+              ocamlformat
+            ])
+            ++ (with pkgs; [ gh ]);
         };
       }
     );

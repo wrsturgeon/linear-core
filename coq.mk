@@ -1,16 +1,26 @@
 # Updated with some ideas from <https://github.com/coq-community/manifesto/wiki/Project-build-scripts>
 
-.PHONY: clean
+.PHONY: build clean
 
 SRCDIR:=theories
 SOURCES:=$(shell find $(SRCDIR) -name '*.v')
+
+COQ_VERSION:=$(coqc --print-version | cut -d '.' -f -2)
+INSTALL_DIR:=$${out}/lib/coq/$(COQ_VERSION)/user-contrib
 
 define escape_str
 '$(subst ',\',$(subst $(NEWLINE),\n,$(1)))'
 endef
 
-install:
-	echo 'TODO'
+build: $(OCAMLDIR)/build
+
+install: $(INSTALL_DIR)/$(UPPERNAME)
+
+$(INSTALL_DIR)/$(UPPERNAME): theories $(INSTALL_DIR) $(OCAMLDIR)/install
+	cp -r $< $(INSTALL_DIR)/$(UPPERNAME)
+
+$(INSTALL_DIR):
+	mkdir -p $@
 
 $(OCAMLDIR)/%: $(OCAMLDIR) $(OCAMLMK)
 	+$(MAKE) $(MAKE_FLAGS) -C $< -f ../$(OCAMLMK) $*
