@@ -4,18 +4,21 @@
 DUNE_VERSION_FULL:=$(shell dune --version)
 DUNE_VERSION:=$(shell echo '$(DUNE_VERSION_FULL)' | cut -d '.' -f -2)
 
+GITHUB_ACCOUNT=wrsturgeon
+SYNOPSIS:=Core semantics for a linear functional programming language.
+
 define DUNE_PROJECT_CONTENTS
 (lang dune $(DUNE_VERSION))
 (name $(UNDERNAME))
 (generate_opam_files true)
-(source (github wrsturgeon/$(LOWERNAME)))
+(source (github $(GITHUB_ACCOUNT)/$(LOWERNAME)))
 (authors "Will Sturgeon")
 (maintainers "Will Sturgeon")
 ; (license LICENSE) ; TODO
-(documentation https://github.com/wrsturgeon/$(LOWERNAME))
+(documentation https://github.com/$(GITHUB_ACCOUNT)/$(LOWERNAME))
 (package
 	(name $(UNDERNAME))
-	(synopsis "Core semantics for a linear functional programming language")
+	(synopsis "$(SYNOPSIS)")
 	; (description "TODO")
 	(depends ocaml dune)
 	; (tags (topics "to describe" your project))
@@ -39,14 +42,19 @@ define LIB_DUNE_CONTENTS
 )
 endef
 
+define escape_str
+'$(subst ',\',$(subst $(NEWLINE),\n,$(1)))'
+endef
+
 some-bullshit: dune-project dune lib/dune
 	dune build --profile release
 
 dune-project:
-	echo -e $(call ESCAPE,$(DUNE_PROJECT_CONTENTS)) > $@
+	echo -e $(call escape_str,$(DUNE_PROJECT_CONTENTS)) > $@
+	-if [ "$$(gh api user --jq '.login')" = "$(GITHUB_ACCOUNT)" ]; then gh repo edit --description=$(call escape_str,$(SYNOPSIS)); fi
 
 dune:
-	echo -e $(call ESCAPE,$(DUNE_CONTENTS)) > $@
+	echo -e $(call escape_str,$(DUNE_CONTENTS)) > $@
 
 lib/dune:
-	echo -e $(call ESCAPE,$(LIB_DUNE_CONTENTS)) > $@
+	echo -e $(call escape_str,$(LIB_DUNE_CONTENTS)) > $@

@@ -4,13 +4,56 @@ ifndef VERBOSE
 .SILENT:
 export MAKE_FLAGS:=$(COMMON_MAKE_FLAGS) --silent
 else
-export MAKE_FLAGS:=$(COMMON_MAKE_FLAGS)
+export MAKE_FLAGS:=$(COMMON_MAKE_FLAGS) --no-silent --warn-undefined-variables
 endif
 
+export UPPERNAME:=LinearCore
+export LOWERNAME:=linear-core
+export UNDERNAME:=$(subst -,_,$(LOWERNAME))
+
+export MCOQ:=Makefile.coq
+export COQMK:=coq.mk
+export OCAMLMK:=ocaml.mk
+export OCAMLDIR:=ocaml
+
+define GIT_IGNORE
+_CoqProject
+.direnv
+.filestoinstall
+.gitignore
+$(MCOQ)
+$(MCOQ).conf
+$(OCAMLDIR)
+result
+*.aux
+*.d
+*.glob
+*.swp
+*.vo*
+endef
+export GIT_IGNORE
+
+define NEWLINE
+
+
+endef
+export NEWLINE
+
+define escape_str
+'$(subst ',\',$(subst $(NEWLINE),\n,$(1)))'
+endef
+
+# Main target:
 ocaml/some-bullshit:
 
-%: coq.mk
-	$(MAKE) $(MAKE_FLAGS) -f $< $@
+%: $(COQMK) .gitignore
+	+$(MAKE) $(MAKE_FLAGS) -f $< $@
 
-coq.mk:
-	if [ -f $@ ]; then :; else echo '`coq.mk` missing!'; exit 1; fi
+$(COQMK):
+	if [ -f $@ ]; then :; else echo '`$(COQMK)` missing!'; exit 1; fi
+
+.gitignore: Makefile
+	echo -e $(call escape_str,$(GIT_IGNORE)) > $@
+
+Makefile:
+	if [ -f $@ ]; then :; else echo '`Makefile` missing!'; exit 1; fi

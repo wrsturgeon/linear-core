@@ -31,7 +31,7 @@
           version = "main";
           src = mmaps-src;
         };
-        propagatedBuildInputs = [ mmaps ] ++ (with ocaml-pkgs; [ ocamlformat ]);
+        propagatedBuildInputs = [ mmaps ];
         buildInputs = with ocaml-pkgs; [
           dune_3
           ocaml
@@ -46,6 +46,10 @@
             propagatedBuildInputs
             buildInputs
             ;
+        };
+        devShells.default = pkgs.mkShell {
+          inputsFrom = [ self.packages.${system}.default ];
+          packages = (with ocaml-pkgs; [ ocamlformat ]) ++ (with pkgs; [ gh ]);
         };
       }
     );
