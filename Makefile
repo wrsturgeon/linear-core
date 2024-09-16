@@ -17,16 +17,15 @@ export OCAMLMK:=ocaml.mk
 export OCAMLDIR:=ocaml
 
 define GIT_IGNORE
-_CoqProject
 .direnv
 .filestoinstall
 .gitignore
 $(MCOQ)
-$(MCOQ).conf
 $(OCAMLDIR)
 out*
 result
 *.aux
+*.conf
 *.d
 *.glob
 *.swp
@@ -45,7 +44,16 @@ define escape_str
 endef
 
 # Main target:
-ocaml/build:
+build:
+
+install:
+	echo "Unfortunately, there's no standard way to install both Coq and OCaml libraries."
+	echo "The former has no package manager, and the latter has multiple competing ones."
+	echo "If you'd like to install this package so you can use it in your own projects,"
+	echo "please look into Nix, the language-agnostic universal package manager,"
+	echo "which has been a permanent solution to package management headaches for many,"
+	echo "including yours truly. (All hail, amen, and so on--but do what you like.)"
+	exit 1
 
 %: $(COQMK) .gitignore
 	+$(MAKE) $(MAKE_FLAGS) -f $< $@
@@ -53,8 +61,8 @@ ocaml/build:
 $(COQMK):
 	if [ -f $@ ]; then :; else echo '`$(COQMK)` missing!'; exit 1; fi
 
-.gitignore: Makefile
+.gitignore: $(THIS_MAKEFILE)
 	echo -e $(call escape_str,$(GIT_IGNORE)) > $@
 
-Makefile:
-	if [ -f $@ ]; then :; else echo '`Makefile` missing!'; exit 1; fi
+$(THIS_MAKEFILE):
+	if [ -f $@ ]; then :; else echo '`$(THIS_MAKEFILE)` missing!'; exit 1; fi

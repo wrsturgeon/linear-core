@@ -6,7 +6,7 @@ DUNE_VERSION:=$(shell echo '$(DUNE_VERSION_FULL)' | cut -d '.' -f -2)
 OCAML_VERSION:=$(shell ocamlc --version)
 
 GITHUB_ACCOUNT=wrsturgeon
-SYNOPSIS:=Core semantics for a linear functional programming language.
+SYNOPSIS:=
 
 define DUNE_PROJECT_CONTENTS
 (lang dune $(DUNE_VERSION))
@@ -49,21 +49,12 @@ endef
 
 build: _build/install/default/lib/$(UNDERNAME)
 
-install: $${OCAML_LIB_INSTALL_DIR}/$(UNDERNAME)
-
-$${OCAML_LIB_INSTALL_DIR}/$(UNDERNAME): _build/install/default/lib/$(UNDERNAME) $${OCAML_LIB_INSTALL_DIR}
-	echo "Installing OCaml libraries into $${OCAML_LIB_INSTALL_DIR}..."
-	cp -r $< $${OCAML_LIB_INSTALL_DIR}/$(UNDERNAME)
-
-$${OCAML_LIB_INSTALL_DIR}:
-	set -eu && mkdir -p $@
-
 _build/install/default/lib/$(UNDERNAME): dune-project dune lib/dune
 	dune build --profile release
+	-if command -v gh &> /dev/null; then if [ "$$(gh api user --jq '.login')" = "$(GITHUB_ACCOUNT)" ]; then gh repo edit --description=$(call escape_str,$(SYNOPSIS)); fi; fi
 
 dune-project:
 	echo -e $(call escape_str,$(DUNE_PROJECT_CONTENTS)) > $@
-	-if command -v gh &> /dev/null; then if [ "$$(gh api user --jq '.login')" = "$(GITHUB_ACCOUNT)" ]; then gh repo edit --description=$(call escape_str,$(SYNOPSIS)); fi; fi
 
 dune:
 	echo -e $(call escape_str,$(DUNE_CONTENTS)) > $@

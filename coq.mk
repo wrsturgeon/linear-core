@@ -4,32 +4,23 @@
 SHELL:=bash
 
 SRCDIR:=theories
-SOURCES:=$(shell find $(SRCDIR) -name '*.v')
 
 define escape_str
 '$(subst ',\',$(subst $(NEWLINE),\n,$(1)))'
 endef
 
+build-coq: $(OCAMLDIR)
+
+# This target compiles and verifies the whole Coq source,
+# but all we care about in the long term is that it
+# creates the OCaml source directory as a byproduct:
+$(OCAMLDIR): $(MCOQ)
+	+$(MAKE) $(MAKE_FLAGS) -f $< # theories/Extract.vo # $@
+
 build: $(OCAMLDIR)/build
-
-install: $${COQ_INSTALL_DIR}/$(UPPERNAME)
-
-$${COQ_INSTALL_DIR}/$(UPPERNAME): theories $${COQ_INSTALL_DIR} $(OCAMLDIR)/install
-	echo "Installing Coq libraries into $${COQ_INSTALL_DIR}..."
-	cp -r $< $${COQ_INSTALL_DIR}/$(UPPERNAME)
-
-$${COQ_INSTALL_DIR}:
-	set -eu && mkdir -p $@
 
 $(OCAMLDIR)/%: $(OCAMLDIR) $(OCAMLMK)
 	+$(MAKE) $(MAKE_FLAGS) -C $< -f ../$(OCAMLMK) $*
-
-# Note that, although this target "really"
-# compiles and verifies the whole Coq source,
-# all that we care about in the long term is that
-# it creates the OCaml source directory as a byproduct:
-$(OCAMLDIR): $(MCOQ)
-	+$(MAKE) $(MAKE_FLAGS) -f $< # theories/Extract.vo # $@
 
 clean: $(MCOQ)
 	+$(MAKE) $(MAKE_FLAGS) -f $< cleanall
@@ -38,8 +29,5 @@ clean: $(MCOQ)
 	+$(MAKE) .gitignore
 	direnv allow
 
-$(MCOQ): _CoqProject
-	$(COQBIN)coq_makefile -f $< -o $@ $(SOURCES)
-
-_CoqProject: Makefile
-	echo '-Q $(SRCDIR) $(UPPERNAME)' > $@
+$(MCOQ): $(THIS_MAKEFILE) $(COQMK)
+	coq_makefile -Q $(SRCDIR) $(UPPERNAME) -o $@ $(shell find $(SRCDIR) -name '*.v')
