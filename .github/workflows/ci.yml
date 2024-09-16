@@ -48,7 +48,7 @@ jobs:
 
     - name: Check for trailing whitespace
       run: |
-        rm -r .direnv
+        rm -fr .direnv
         if [ -z "$(grep -IRnw . -e '.* $')" ]; then :; else
           grep -IRnw . -e '.* $'
         fi
