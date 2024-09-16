@@ -29,6 +29,7 @@
           coq-pkgs = versions.coq-pkgs or pkgs.coqPackages;
           coq = versions.coq or coq-pkgs.coq;
           ocaml-pkgs = versions.ocaml-pkgs or coq.ocamlPackages;
+          dune = versions.dune or ocaml-pkgs.dune_3;
           mmaps = versions.mmaps or coq-pkgs.mkCoqDerivation {
             pname = "mmaps";
             version = "main";
@@ -42,28 +43,30 @@
             inherit version;
             src = ./.;
             propagatedBuildInputs = with context; [ mmaps ];
-            buildPhase = ''
-              make build-coq
-            '';
             installPhase =
               let
                 coq-install-path = "lib/coq/${context.coq.coq-version}/user-contrib";
               in
               ''
                 mkdir -p ''${out}/${coq-install-path}
-                mv theories ''${out}/${coq-install-path}/${pname}
+                mv theories ''${out}/${coq-install-path}/${cname}
 
                 mkdir -p ''${out}/${ocaml-src-install-path}
-                mv ocaml ''${out}/${ocaml-src-install-path}/${pname}
+                mv ocaml ''${out}/${ocaml-src-install-path}/${uname}
               '';
           };
         with-context =
           context:
           let
             coq-built = self.lib.coq-with-context context;
-            escape = context.pkgs.lib.strings.escapeShellArg;
+            inherit (context.pkgs.lib) strings;
+            escape = strings.escapeShellArg;
+            dune-version-full = context.dune.version;
+            dune-version-parts = strings.splitString "." dune-version-full;
+            dune-version-2-part = context.pkgs.lib.lists.take 2 dune-version-parts;
+            dune-version = strings.concatStringsSep "." dune-version-2-part;
             dune-project-contents = ''
-              (lang dune ${context.dune.version})
+              (lang dune ${dune-version})
               (name ${uname})
               (generate_opam_files true)
               (source (github wrsturgeon/${pname}))
@@ -96,8 +99,9 @@
             '';
           in
           context.ocaml-pkgs.buildDunePackage {
-            inherit pname version;
-            src = "${coq-built}/${ocaml-src-install-path}/${pname}";
+            pname = uname;
+            inherit version;
+            src = "${coq-built}/${ocaml-src-install-path}/${uname}";
             propagatedBuildInputs = [ coq-built ];
             configurePhase = ''
               echo ${escape dune-project-contents} > dune-project
@@ -131,8 +135,6 @@
       system:
       let
         pkgs = import nixpkgs { inherit system; };
-        coq-pkgs = pkgs.coqPackages;
-        ocaml-pkgs = coq-pkgs.coq.ocamlPackages;
       in
       {
         packages = {
@@ -148,11 +150,13 @@
           test-coq =
             let
               pname = "test-coq";
+              context = self.lib.context-with-versions { inherit pkgs; };
             in
+            with context;
             coq-pkgs.mkCoqDerivation {
               inherit pname;
               version = "none";
-              buildInputs = [ (self.packages.${system}.coq-only) ];
+              buildInputs = [ (self.lib.coq-with-context context) ];
               src = pkgs.writeTextFile {
                 name = "${pname}-src";
                 destination = "/theories/Test.v";
@@ -168,21 +172,29 @@
           test_ocaml =
             let
               pname = "test_ocaml";
+              context = self.lib.context-with-versions { inherit pkgs; };
             in
+            with context;
             ocaml-pkgs.buildDunePackage {
               inherit pname;
               version = "none";
-              buildInputs = [ (self.packages.${system}.default) ];
+              propagatedBuildInputs = [
+                (builtins.trace "${self.lib.with-context context}" (self.lib.with-context context))
+              ];
               src = pkgs.stdenvNoCC.mkDerivation {
                 name = "${pname}-src";
                 src = ./.;
-                buildInputs = with ocaml-pkgs; [ dune_3 ];
+                buildInputs = with context; [ dune ];
                 buildPhase = ''
-                  dune init proj ${pname} ${pname}
+                  dune init proj ${pname} ./${pname}
                   sed -i '1s/^/open LinearCore\n/' ${pname}/bin/main.ml
                 '';
                 installPhase = "cp -Lr . $out";
               };
+              buildPhase = ''
+                ocamlfind list
+                dune build
+              '';
             };
         };
         devShells.default = self.lib.shell-with-versions { inherit pkgs; };

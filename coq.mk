@@ -9,23 +9,18 @@ define escape_str
 '$(subst ',\',$(subst $(NEWLINE),\n,$(1)))'
 endef
 
-build-coq: $(OCAMLDIR)
+build: ocaml
 
 # This target compiles and verifies the whole Coq source,
 # but all we care about in the long term is that it
 # creates the OCaml source directory as a byproduct:
-$(OCAMLDIR): $(MCOQ)
+ocaml: $(MCOQ)
 	+$(MAKE) $(MAKE_FLAGS) -f $< # theories/Extract.vo # $@
-
-build: $(OCAMLDIR)/build
-
-$(OCAMLDIR)/%: $(OCAMLDIR) $(OCAMLMK)
-	+$(MAKE) $(MAKE_FLAGS) -C $< -f ../$(OCAMLMK) $*
 
 clean: $(MCOQ)
 	+$(MAKE) $(MAKE_FLAGS) -f $< cleanall
 	rm -fr $(subst $(NEWLINE), ,$(GIT_IGNORE))
-	find . -name '*.aux' -o -name '*.d' -o -name '*.glob' -o -name '*.ml' -o -name '*.mli' -o -name '*.swp' -o -name '*.vo' -o -name '*.vok' -o -name '*.vos' | xargs -r rm
+	find . -name '*.aux' -o -name '*.conf' -o -name '*.d' -o -name '*.glob' -o -name '*.ml' -o -name '*.mli' -o -name '*.swp' -o -name '*.vo' -o -name '*.vok' -o -name '*.vos' | xargs -r rm
 	+$(MAKE) .gitignore
 	direnv allow
 

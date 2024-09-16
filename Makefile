@@ -13,15 +13,13 @@ export UNDERNAME:=$(subst -,_,$(LOWERNAME))
 
 export MCOQ:=Makefile.coq
 export COQMK:=coq.mk
-export OCAMLMK:=ocaml.mk
-export OCAMLDIR:=ocaml
 
 define GIT_IGNORE
 .direnv
 .filestoinstall
 .gitignore
 $(MCOQ)
-$(OCAMLDIR)
+ocaml
 out*
 result
 *.aux
