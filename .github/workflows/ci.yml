@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Install Nix
+      uses: cachix/install-nix-action@v23
+
+    - name: Install direnv
+      uses: aldoborrero/direnv-nix-action@v2
+      with:
+        use_nix_profile: true
+        nix_channel: nixpkgs
+
+    - name: Make
+      run: make
+
+    - name: Clean
+      run: |
+        make clean
+        if [ -z "$(git status --porcelain)" ]; then :; else
+          echo '`make clean` missed some tracked files:'
+          git status
+          exit 1
+        fi
+
+    - name: Nix
+      run: nix build
+
+    # - name: Check for unverified assumptions
+    #   # https://coq.inria.fr/refman/language/core/assumptions.html#assumptions
+    #   run: |
+    #     export MATCH='Admitted\|Axiom\|Axioms\|Conjecture\|Conjectures\|Parameter\|Parameters\|Hypothesis\|Hypotheses\|Variable\|Variables'
+    #     for f in $(find . -name '*.v'); do if grep -Iq ${MATCH} ${f}; then grep -IRnw theories -e ${MATCH}; exit 1; fi; done
+
+    - name: Check for trailing whitespace
+      run: |
+        rm -r .direnv
+        if [ -z "$(grep -IRnw . -e '.* $')" ]; then :; else
+          grep -IRnw . -e '.* $'
+        fi
+
+    - uses: actions/checkout@v4
