@@ -9,6 +9,9 @@ define escape_str
 '$(subst ',\',$(subst $(NEWLINE),\n,$(1)))'
 endef
 
+install:
+	echo 'TODO'
+
 $(OCAMLDIR)/%: $(OCAMLDIR) $(OCAMLMK)
 	+$(MAKE) $(MAKE_FLAGS) -C $< -f ../$(OCAMLMK) $*
 
