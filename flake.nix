@@ -5,12 +5,14 @@
       flake = false;
       url = "github:coq-community/coq-mmaps";
     };
+    nix-filter.url = "github:numtide/nix-filter";
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
   };
   outputs =
     {
       flake-utils,
       mmaps-src,
+      nix-filter,
       nixpkgs,
       self,
     }:
@@ -41,7 +43,14 @@
           context.coq-pkgs.mkCoqDerivation {
             pname = "${pname}-coq";
             inherit version;
-            src = ./.;
+            src = nix-filter {
+              root = ./.;
+              include = [
+                "Makefile"
+                "coq.mk"
+                "theories"
+              ];
+            };
             propagatedBuildInputs = with context; [ mmaps ];
             installPhase =
               let
@@ -142,10 +151,15 @@
           coq-only = self.lib.coq-with-versions { inherit pkgs; };
           tests = pkgs.stdenvNoCC.mkDerivation {
             name = "tests";
+            src = nix-filter {
+              root = ./.;
+              include = [ ];
+            };
             buildInputs = with self.packages.${system}; [
               test-coq
               test_ocaml
             ];
+            installPhase = "touch $out";
           };
           test-coq =
             let
@@ -161,7 +175,7 @@
                 name = "${pname}-src";
                 destination = "/theories/Test.v";
                 text = ''
-                  From LinearCore Require Map.
+                  From ${cname} Require Map.
                 '';
               };
               buildPhase = ''
@@ -179,22 +193,23 @@
               inherit pname;
               version = "none";
               propagatedBuildInputs = [
-                (builtins.trace "${self.lib.with-context context}" (self.lib.with-context context))
+                (self.lib.with-context context)
               ];
               src = pkgs.stdenvNoCC.mkDerivation {
                 name = "${pname}-src";
-                src = ./.;
-                buildInputs = with context; [ dune ];
+                src = nix-filter {
+                  root = ./.;
+                  include = [ ];
+                };
+                buildInputs = [ pkgs.tree ] ++ (with context; [ dune ]);
                 buildPhase = ''
                   dune init proj ${pname} ./${pname}
-                  sed -i '1s/^/open LinearCore\n/' ${pname}/bin/main.ml
+                  tree -a
+                  sed -i 's/libraries/libraries linear_core/g' ${pname}/bin/dune
+                  sed -i '1s/^/open Linear_core\n/' ${pname}/bin/main.ml
                 '';
-                installPhase = "cp -Lr . $out";
+                installPhase = "cp -Lr ./${pname} $out";
               };
-              buildPhase = ''
-                ocamlfind list
-                dune build
-              '';
             };
         };
         devShells.default = self.lib.shell-with-versions { inherit pkgs; };

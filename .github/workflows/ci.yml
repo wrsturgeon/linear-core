@@ -40,6 +40,9 @@ jobs:
     - name: Nix
       run: nix build
 
+    - name: Nix tests
+      run: nix build .\#tests
+
     # - name: Check for unverified assumptions
     #   # https://coq.inria.fr/refman/language/core/assumptions.html#assumptions
     #   run: |
