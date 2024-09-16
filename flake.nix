@@ -48,6 +48,11 @@
             propagatedBuildInputs
             buildInputs
             ;
+          installPhase = ''
+            export COQ_INSTALL_DIR=''${out}/lib/coq/${coq.coq-version}/user-contrib
+            export OCAML_LIB_INSTALL_DIR=''${out}/lib/ocaml/${ocaml.version}/site-lib
+            make install
+          '';
         };
         devShells.default = pkgs.mkShell {
           inputsFrom = [ self.packages.${system}.default ];

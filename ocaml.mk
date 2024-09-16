@@ -1,11 +1,9 @@
 .PHONY: build clean
-.SHELL: bash
+SHELL:=bash
 
 DUNE_VERSION_FULL:=$(shell dune --version)
 DUNE_VERSION:=$(shell echo '$(DUNE_VERSION_FULL)' | cut -d '.' -f -2)
 OCAML_VERSION:=$(shell ocamlc --version)
-
-LIB_INSTALL_DIR:=$${out}/lib/ocaml/$(OCAML_VERSION)/site-lib
 
 GITHUB_ACCOUNT=wrsturgeon
 SYNOPSIS:=Core semantics for a linear functional programming language.
@@ -51,13 +49,14 @@ endef
 
 build: _build/install/default/lib/$(UNDERNAME)
 
-install: $(LIB_INSTALL_DIR)/$(UNDERNAME)
+install: $${OCAML_LIB_INSTALL_DIR}/$(UNDERNAME)
 
-$(LIB_INSTALL_DIR)/$(UNDERNAME): _build/install/default/lib/$(UNDERNAME) $(LIB_INSTALL_DIR)
-	cp -r $< $(LIB_INSTALL_DIR)/$(UNDERNAME)
+$${OCAML_LIB_INSTALL_DIR}/$(UNDERNAME): _build/install/default/lib/$(UNDERNAME) $${OCAML_LIB_INSTALL_DIR}
+	echo "Installing OCaml libraries into $${OCAML_LIB_INSTALL_DIR}..."
+	cp -r $< $${OCAML_LIB_INSTALL_DIR}/$(UNDERNAME)
 
-$(LIB_INSTALL_DIR):
-	mkdir -p $@
+$${OCAML_LIB_INSTALL_DIR}:
+	set -eu && mkdir -p $@
 
 _build/install/default/lib/$(UNDERNAME): dune-project dune lib/dune
 	dune build --profile release
