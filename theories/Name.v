@@ -24,8 +24,8 @@ Definition eqb a b :=
     end
   end.
 
-Lemma eqb_spec a b
-  : Reflect.Reflect (a = b) (eqb a b).
+Lemma spec a b
+  : Reflect.Bool (a = b) (eqb a b).
 Proof.
   destruct a as [ha ta]. destruct b as [hb tb]. cbn.
   destruct (Ascii.eqb_spec ha hb). 2: { constructor. intro D. invert D. apply n. reflexivity. }
@@ -58,8 +58,8 @@ Qed.
 Lemma eqb_sym a b
   : eqb a b = eqb b a.
 Proof.
-  intros. destruct (eqb_spec b a). { subst. apply eqb_refl. }
-  destruct (eqb_spec a b). 2: { reflexivity. } subst. contradiction N. reflexivity.
+  intros. destruct (spec b a). { subst. apply eqb_refl. }
+  destruct (spec a b). 2: { reflexivity. } subst. contradiction N. reflexivity.
 Qed.
 
 

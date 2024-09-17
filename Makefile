@@ -18,6 +18,7 @@ define GIT_IGNORE
 .direnv
 .filestoinstall
 .gitignore
+_CoqProject
 $(MCOQ)
 ocaml
 out*

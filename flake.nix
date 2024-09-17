@@ -146,6 +146,31 @@
         pkgs = import nixpkgs { inherit system; };
       in
       {
+        apps.syntax-check = {
+          type = "app";
+          program = "${pkgs.writeScriptBin "run" ''
+            #!${pkgs.bash}/bin/bash
+
+            if rg 'Admitted\|Axiom\|Axioms\|Conjecture\|Conjectures\|Parameter\|Parameters\|Hypothesis\|Hypotheses\|Variable\|Variables'; then
+              echo
+              echo 'SYNTAX ERROR: unverified assumption (above)'
+              exit 1
+            fi
+
+            if rg ' $'; then
+              echo
+              echo 'SYNTAX ERROR: trailing whitespace (above)'
+              exit 1
+            fi
+
+            if rg ':$' -g '*.v'; then
+              echo
+              echo 'SYNTAX ERROR: colons before types should begin their own lines (above)'
+              exit 1
+            fi
+
+          ''}/bin/run";
+        };
         packages = {
           default = self.lib.with-versions { inherit pkgs; };
           coq-only = self.lib.coq-with-versions { inherit pkgs; };

@@ -4,6 +4,7 @@
 SHELL:=bash
 
 SRCDIR:=theories
+SOURCES:=$(shell find $(SRCDIR) -name '*.v')
 
 define escape_str
 '$(subst ',\',$(subst $(NEWLINE),\n,$(1)))'
@@ -24,5 +25,8 @@ clean: $(MCOQ)
 	+$(MAKE) .gitignore
 	direnv allow
 
-$(MCOQ): $(THIS_MAKEFILE) $(COQMK)
-	coq_makefile -Q $(SRCDIR) $(UPPERNAME) -o $@ $(shell find $(SRCDIR) -name '*.v')
+$(MCOQ): _CoqProject $(SOURCES)
+	coq_makefile -f $< -o $@ $(SOURCES)
+
+_CoqProject: $(THIS_MAKEFILE) $(COQMK)
+	echo '-Q $(SRCDIR) $(UPPERNAME)' > $@
