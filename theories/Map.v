@@ -26,7 +26,7 @@ Lemma find_spec {T} (m : to T) k
 Proof.
   unfold Find. unfold find. destruct MapCore.find as [v |] eqn:F; constructor.
   - apply MapCore.find_spec. exact F.
-  - intros v M. apply MapCore.find_spec in M. rewrite M in F. discriminate F.
+  - intros v Fx. apply MapCore.find_spec in Fx. rewrite Fx in F. discriminate F.
 Qed.
 
 Lemma find_det {T} {m : to T} {k v1} (F1 : Find m k v1) {v2} (F2 : Find m k v2)
@@ -41,21 +41,6 @@ Lemma find_iff {T} (m : to T) k v
 Proof.
   destruct (find_spec m k). { split. { intro F. f_equal. eapply find_det; eassumption. } intro E. invert E. exact Y. }
   split. { intro F. apply N in F as []. } intro D. discriminate D.
-Qed.
-
-
-
-Definition In {T} (m : to T) k := exists v, Find m k v.
-Arguments In {T} m k/.
-
-Definition in_ {T} (m : to T) k := match find m k with Some _ => true | None => false end.
-Arguments in_ {T} m k/.
-
-Lemma in_spec {T} (m : to T) k
-  : Reflect.Bool (In m k) (in_ m k).
-Proof.
-  unfold In. unfold in_. destruct (find_spec m k); constructor. { eexists. exact Y. }
-  intros [v M]. apply N in M as [].
 Qed.
 
 
@@ -134,6 +119,29 @@ Lemma eq_sym {T} (a b : to T)
   : Eq a b <-> Eq b a.
 Proof. split; intros E k v; cbn in E; rewrite E; reflexivity. Qed.
 
+Lemma eq_trans {T} {a b : to T} (Eab : Eq a b) {c} (Ebc : Eq b c)
+  : Eq a c.
+Proof. split; intro F; [apply Ebc |]; apply Eab; [| apply Ebc]; exact F. Qed.
+
+
+
+Definition In {T} (m : to T) k := exists v, Find m k v.
+Arguments In {T} m k/.
+
+Definition in_ {T} (m : to T) k := match find m k with Some _ => true | None => false end.
+Arguments in_ {T} m k/.
+
+Lemma in_spec {T} (m : to T) k
+  : Reflect.Bool (In m k) (in_ m k).
+Proof.
+  unfold In. unfold in_. destruct (find_spec m k); constructor. { eexists. exact Y. }
+  intros [v F]. apply N in F as [].
+Qed.
+
+Lemma in_eq {T} {m1 m2 : to T} (E : Eq m1 m2) x
+  : In m1 x <-> In m2 x.
+Proof. split; intros [y F]; eexists; apply E; exact F. Qed.
+
 
 
 Definition Empty {T} (m : to T) : Prop :=
@@ -158,8 +166,8 @@ Lemma find_singleton {T} x y k (v : T)
   : Find (singleton k v) x y <-> (x = k /\ y = v).
 Proof.
   split.
-  - intro M. apply MapCore.bindings_spec1 in M. rewrite MapCore.singleton_spec in M.
-    invert M as [? ? E | ? ? C]. 2: { invert C. } exact E.
+  - intro F. apply MapCore.bindings_spec1 in F. rewrite MapCore.singleton_spec in F.
+    invert F as [? ? E | ? ? C]. 2: { invert C. } exact E.
   - intros [-> ->]. apply MapCore.bindings_spec1. left. split; reflexivity.
 Qed.
 
@@ -229,17 +237,24 @@ Definition disjoint_add {T} k v (m : to T) :=
   end.
 Arguments disjoint_add {T} k v m/.
 
-Lemma find_overriding_add {T} {k v} {m : to T} (A : AgreeOn k v m) x y
-  : Find (overriding_add k v m) x y <-> ((x = k /\ y = v) \/ Find m x y).
+Lemma find_overriding_add {T} {k v} {m : to T} x y
+  : Find (overriding_add k v m) x y <-> ((x = k /\ y = v) \/ (x <> k /\ Find m x y)).
 Proof.
   split.
-  - intro M. apply MapCore.find_spec in M. destruct (Name.spec x k); [left | right].
-    + subst. split. { reflexivity. } unfold overriding_add in M.
-      rewrite MapCore.add_spec1 in M. { invert M. subst. reflexivity. }
-    + rewrite MapCore.add_spec2 in M. 2: { symmetry. exact N. } apply MapCore.find_spec. exact M.
-  - intros [[-> ->] | M]. { apply MapCore.find_spec. apply MapCore.add_spec1. }
-    destruct (Name.spec x k). { subst. apply MapCore.find_spec. erewrite (A _ M). apply MapCore.add_spec1. }
-    apply MapCore.find_spec. rewrite MapCore.add_spec2. 2: { symmetry. exact N. } apply MapCore.find_spec. exact M.
+  - intro F. apply MapCore.find_spec in F. destruct (Name.spec x k); [left | right].
+    + subst. split. { reflexivity. } unfold overriding_add in F.
+      rewrite MapCore.add_spec1 in F. { invert F. subst. reflexivity. }
+    + rewrite MapCore.add_spec2 in F. 2: { symmetry. exact N. } split. { assumption. } apply MapCore.find_spec. exact F.
+  - intros [[-> ->] | [N F]]. { apply MapCore.find_spec. apply MapCore.add_spec1. }
+    apply MapCore.find_spec. rewrite MapCore.add_spec2. 2: { symmetry. exact N. } apply MapCore.find_spec. exact F.
+Qed.
+
+Lemma in_add {T k v m m'} (A : @Add T k v m m') x
+  : In m' x <-> (x = k \/ In m x).
+Proof.
+  split.
+  - intros [y F]. apply A in F as [[-> ->] | F]; [left | right]. { reflexivity. } eexists. exact F.
+  - intros [-> | [y F]]; eexists; apply A; [left | right]. { split; reflexivity. } exact F.
 Qed.
 
 Lemma in_overriding_add {T} x k v (m : to T)
@@ -256,25 +271,32 @@ Qed.
 
 Lemma add_overriding {T} {k v} {m : to T} (A : AgreeOn k v m)
   : Add k v m (overriding_add k v m).
-Proof. cbn. intros. rewrite find_overriding_add. { reflexivity. } exact A. Qed.
+Proof.
+  cbn. intros. rewrite find_overriding_add. split; (intros [[-> ->] | F]; [left; split; reflexivity |]).
+  - destruct F as [N F]. right. exact F.
+  - destruct (Name.spec x k). { subst. left. split. { reflexivity. } apply A. exact F. }
+    right. split. { exact N. } exact F.
+Qed.
 
 Lemma find_checked_add {T eqb} (eqb_spec : forall a b, Reflect.Bool (a = b) (eqb a b))
   {k v} {m m' : to T} (E : checked_add eqb k v m = Some m') x y
   : Find m' x y <-> ((x = k /\ y = v) \/ Find m x y).
 Proof.
-  unfold checked_add in E. destruct (find_spec m k) as [v' M | N].
-  - destruct (eqb_spec v' v); invert E. split. { intro F. right. exact F. }
-    intros [[-> ->] | F]. { exact M. } exact F.
-  - invert E. apply find_overriding_add. cbn. intros. apply N in F as [].
+  unfold checked_add in E. destruct (find_spec m k) as [v' F | N].
+  - destruct (eqb_spec v' v); invert E. split. { intro F'. right. exact F'. }
+    intros [[-> ->] | F']. { exact F. } exact F'.
+  - invert E. rewrite find_overriding_add. split; (intros [[-> ->] | F]; [left; split; reflexivity |]).
+    + destruct F as [N' F]. right. exact F.
+    + right. split. { intros ->. apply N in F as []. } assumption.
 Qed.
 
 Lemma in_checked_add {T eqb} (eqb_spec : forall a b, Reflect.Bool (a = b) (eqb a b))
   {k v} {m m' : to T} (E : checked_add eqb k v m = Some m') x
   : In m' x <-> (x = k \/ In m x).
 Proof.
-  unfold checked_add in E. destruct (find_spec m k) as [v' M | N].
-  - destruct (eqb_spec v' v); invert E. split. { intro F. right. exact F. }
-    intros [-> | F]. { eexists. exact M. } exact F.
+  unfold checked_add in E. destruct (find_spec m k) as [v' F | N].
+  - destruct (eqb_spec v' v); invert E. split. { intro F'. right. exact F'. }
+    intros [-> | F']. { eexists. exact F. } exact F'.
   - invert E. apply in_overriding_add.
 Qed.
 
@@ -282,30 +304,32 @@ Lemma add_checked {T eqb} (eqb_spec : forall a b, Reflect.Bool (a = b) (eqb a b)
   {k v} {m m' : to T} (E : checked_add eqb k v m = Some m')
   : Add k v m m'.
 Proof.
-  unfold checked_add in E. destruct (find_spec m k) as [v' M | N].
-  - destruct (eqb_spec v' v); invert E. split. { intro F. right. exact F. }
-    intros [[-> ->] | F]. { exact M. } exact F.
+  unfold checked_add in E. destruct (find_spec m k) as [v' F | N].
+  - destruct (eqb_spec v' v); invert E. split. { intro F'. right. exact F'. }
+    intros [[-> ->] | F']. { exact F. } exact F'.
   - invert E. apply add_overriding. cbn. intros. apply N in F as [].
 Qed.
 
 Lemma find_disjoint_add {T k v} {m m' : to T} (E : disjoint_add k v m = Some m') x y
   : Find m' x y <-> ((x = k /\ y = v) \/ Find m x y).
 Proof.
-  unfold disjoint_add in E. destruct (find_spec m k) as [v' M | N]. { discriminate E. }
-  invert E. apply find_overriding_add. cbn. intros. apply N in F as [].
+  unfold disjoint_add in E. destruct (find_spec m k) as [v' F | N]. { discriminate E. }
+  invert E. rewrite find_overriding_add. split; (intros [[-> ->] | F]; [left; split; reflexivity |]).
+  - destruct F as [N' F]. right. exact F.
+  - right. split. 2: { exact F. } intros ->. apply N in F as [].
 Qed.
 
 Lemma in_disjoint_add {T k v} {m m' : to T} (E : disjoint_add k v m = Some m') x
   : In m' x <-> (x = k \/ In m x).
 Proof.
-  unfold disjoint_add in E. destruct (find_spec m k) as [v' M | N]. { discriminate E. }
+  unfold disjoint_add in E. destruct (find_spec m k) as [v' F | N]. { discriminate E. }
   invert E. apply in_overriding_add.
 Qed.
 
 Lemma add_disjoint {T k v} {m m' : to T} (E : disjoint_add k v m = Some m')
   : Add k v m m'.
 Proof.
-  unfold disjoint_add in E. destruct (find_spec m k) as [v' M | N].
+  unfold disjoint_add in E. destruct (find_spec m k) as [v' F | N].
   invert E. invert E. apply add_overriding. cbn. intros. apply N in F as [].
 Qed.
 
@@ -328,6 +352,52 @@ Proof.
   subst. split.
   - intro F. apply A1 in F as [[-> ->] | F]; [left | right]. { split; reflexivity. } apply Em. exact F.
   - intro F. apply A1. destruct F as [[-> ->] | F]; [left | right]. { split; reflexivity. } apply Em. exact F.
+Qed.
+
+
+
+Definition Overwrite {T} k v (m m' : to T) : Prop :=
+  In m k /\ (* <-- this proof should be easy wherever `Overwrite` is used, but it's a sanity check *)
+  forall x y, (Find m' x y <-> ((x = k /\ y = v) \/ (x <> k /\ Find m x y))).
+Arguments Overwrite {T} k v m m'/.
+
+Definition overwrite := @overriding_add.
+Arguments overwrite {T} k v m/.
+
+Lemma overwrite_overwrite {T} k m (I : In m k) (v : T)
+  : Overwrite k v m (overwrite k v m).
+Proof. split. { exact I. } intros. apply find_overriding_add. Qed.
+
+Lemma overwrite_det {T}
+  k1 (v1 : T) m1 m1' (O1 : Overwrite k1 v1 m1 m1')
+  k2 (Ek : k1 = k2)
+  v2 (Ev : v1 = v2)
+  m2 (Em : Eq m1 m2)
+  m2' (O2 : Overwrite k2 v2 m2 m2')
+  : Eq m1' m2'.
+Proof.
+  intros x y. subst. destruct O1 as [I1 O1]. destruct O2 as [I2 O2].
+  rewrite O1. rewrite O2. cbn in Em. rewrite Em. reflexivity.
+Qed.
+
+Lemma overwrite_eq {T}
+  k1 (v1 : T) m1 m' (O1 : Overwrite k1 v1 m1 m')
+  k2 (Ek : k1 = k2)
+  v2 (Ev : v1 = v2)
+  m2 (Em : Eq m1 m2)
+  : Overwrite k2 v1 m2 m'.
+Proof.
+  subst. destruct O1 as [I1 O1]. split. { eapply in_eq. { apply eq_sym. exact Em. } exact I1. }
+  intros. rewrite O1. cbn in Em. rewrite Em. reflexivity.
+Qed.
+
+Lemma in_overwrite {T k v m m'} (O : @Overwrite T k v m m') x
+  : In m' x <-> In m x.
+Proof.
+  destruct O as [I O].
+  split; intros [y F]. { apply O in F as [[-> ->] | [N F]]. { exact I. } eexists. exact F. }
+  destruct (Name.spec x k). { eexists. apply O. left. split. { exact Y. } reflexivity. }
+  eexists. apply O. right. split. { exact N. } exact F.
 Qed.
 
 
@@ -373,18 +443,18 @@ Arguments checked_union {T}/ a b : rename.
 Lemma find_overriding_union {T} (a b : to T) x
   : find (overriding_union a b) x = match find a x with Some y => Some y | None => find b x end.
 Proof.
-  unfold overriding_union. destruct (find_spec a x) as [y M | Na].
-  - assert (I : In a x). { eexists. exact M. } unfold find.
+  unfold overriding_union. destruct (find_spec a x) as [y F | Na].
+  - assert (I : In a x). { eexists. exact F. } unfold find.
     edestruct (@MapCore.merge_spec1 _ _ _ (@override _) a b _ (or_introl I)) as [? [-> ->]].
-    cbn. apply find_iff in M. unfold find in M. rewrite M. reflexivity.
-  - destruct (find_spec b x) as [y M | Nb].
-    + assert (I : In b x). { eexists. exact M. } unfold find.
+    cbn. apply find_iff in F. unfold find in F. rewrite F. reflexivity.
+  - destruct (find_spec b x) as [y F | Nb].
+    + assert (I : In b x). { eexists. exact F. } unfold find.
       edestruct (@MapCore.merge_spec1 _ _ _ (@override _) a b _ (or_intror I)) as [? [-> ->]].
-      cbn. destruct MapCore.find eqn:F. { apply MapCore.find_spec in F. apply Na in F as []. }
-      apply MapCore.find_spec. exact M.
+      cbn. destruct MapCore.find eqn:Ef. { apply MapCore.find_spec in Ef. apply Na in Ef as []. }
+      apply MapCore.find_spec. exact F.
     + destruct find eqn:F. 2: { reflexivity. }
       apply MapCore.find_spec in F. assert (I : In (MapCore.merge (@override T) a b) x). { eexists. exact F. }
-      apply MapCore.merge_spec2 in I as [[y M] | [y M]]; [apply Na in M as [] | apply Nb in M as []].
+      apply MapCore.merge_spec2 in I as [[y F'] | [y F']]; [apply Na in F' as [] | apply Nb in F' as []].
 Qed.
 
 Lemma in_overriding_union {T} (a b : to T) x
@@ -404,12 +474,12 @@ Lemma union_overriding_union {T} {a b : to T} (A : Agree a b)
   : Union a b (overriding_union a b).
 Proof.
   split.
-  - intro M. apply find_iff in M. rewrite find_overriding_union in M. destruct (find_spec a k).
-    + invert M. left. exact Y.
-    + apply find_iff in M. right. exact M.
-  - intro M. apply find_iff. rewrite find_overriding_union. destruct M as [M | M].
-    + apply find_iff in M as ->. reflexivity.
-    + destruct (find_spec a k). { f_equal. symmetry. eapply A; eassumption. } apply find_iff. exact M.
+  - intro F. apply find_iff in F. rewrite find_overriding_union in F. destruct (find_spec a k).
+    + invert F. left. exact Y.
+    + apply find_iff in F. right. exact F.
+  - intro F. apply find_iff. rewrite find_overriding_union. destruct F as [F | F].
+    + apply find_iff in F as ->. reflexivity.
+    + destruct (find_spec a k). { f_equal. symmetry. eapply A; eassumption. } apply find_iff. exact F.
 Qed.
 
 Lemma find_checked_union {T eqb} {a b c : to T} (E : checked_union eqb a b = Some c) x
