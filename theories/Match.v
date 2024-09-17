@@ -15,12 +15,12 @@ Inductive Strict (context : Context.context) : Pattern.strict -> Term.term -> Co
   | Ctr context_with_matches (E : Map.Eq context context_with_matches) ctor
       : Strict context (Pattern.Ctr ctor) (Term.Ctr ctor) context_with_matches
   | App function_pattern function
-      context_with_function_matches (function_matched :
-        Strict context function_pattern function context_with_function_matches)
+      context_with_function_matches (function_matched
+        : Strict context function_pattern function context_with_function_matches)
       argument_name (N : forall (I : Map.In context_with_function_matches argument_name), False)
       (* can't match the same name twice in the same pattern ^^^ *)
-      argument context_with_matches (A :
-        Map.Add argument_name argument context_with_function_matches context_with_matches)
+      argument context_with_matches (A
+        : Map.Add argument_name argument context_with_function_matches context_with_matches)
       : Strict context (Pattern.App function_pattern argument_name) (Term.App function argument) context_with_matches
   .
 Arguments Strict context strict term context_with_matches.
@@ -90,12 +90,12 @@ Inductive StrictRef (context : Context.context) : Pattern.strict -> Term.term ->
   | CtrR context_with_matches (E : Map.Eq context context_with_matches) ctor
       : StrictRef context (Pattern.Ctr ctor) (Term.Ctr ctor) (Term.Ctr ctor) context_with_matches
   | AppR
-      function_pattern function context_with_function_matches function_cleaved (function_matched :
-        StrictRef context function_pattern function function_cleaved context_with_function_matches)
+      function_pattern function context_with_function_matches function_cleaved (function_matched
+        : StrictRef context function_pattern function function_cleaved context_with_function_matches)
       argument_name (N : forall (I : Map.In context_with_function_matches argument_name), False)
       (* can't match the same name twice in the same pattern ^^^ *)
-      argument context_with_matches (A :
-        Map.Add argument_name argument context_with_function_matches context_with_matches)
+      argument context_with_matches (A
+        : Map.Add argument_name argument context_with_function_matches context_with_matches)
       : StrictRef context
         (Pattern.App function_pattern argument_name)
         (Term.App function argument)
@@ -319,8 +319,8 @@ Variant Pattern (context : Context.context) : Pattern.pattern -> Term.term -> Co
       term context_with_matches (S : Map.Add name term context context_with_matches)
       : Pattern context (Pattern.Nam name) term context_with_matches
   | Pat
-      move_or_reference term context_with_matches (move_or_reference_matched :
-        MoveOrReference context move_or_reference term context_with_matches)
+      move_or_reference term context_with_matches (move_or_reference_matched
+        : MoveOrReference context move_or_reference term context_with_matches)
       : Pattern context (Pattern.Pat move_or_reference) term context_with_matches
   .
 Arguments Pattern context pattern term context_with_matches.
