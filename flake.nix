@@ -176,6 +176,8 @@
                   exit 1
                 fi
 
+                echo 'All good!'
+
               ''}/bin/run";
             };
             tests =
@@ -193,6 +195,8 @@
                   set -eu
 
                   ${pkgs.lib.strings.concatLines (builtins.map (s: "nix build .\\#${s}") tests-to-run)}
+
+                  echo 'All good!'
 
                 ''}/bin/run";
               };
