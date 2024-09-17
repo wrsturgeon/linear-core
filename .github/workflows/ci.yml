@@ -41,13 +41,7 @@ jobs:
       run: nix build
 
     - name: Nix tests
-      run: nix build .\#tests
-
-    # - name: Check for unverified assumptions
-    #   # https://coq.inria.fr/refman/language/core/assumptions.html#assumptions
-    #   run: |
-    #     export MATCH='Admitted\|Axiom\|Axioms\|Conjecture\|Conjectures\|Parameter\|Parameters\|Hypothesis\|Hypotheses\|Variable\|Variables'
-    #     for f in $(find . -name '*.v'); do if grep -Iq ${MATCH} ${f}; then grep -IRnw theories -e ${MATCH}; exit 1; fi; done
+      run: nix run .\#tests
 
     - name: Syntax check
       run: nix run .\#syntax-check

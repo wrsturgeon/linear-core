@@ -51,8 +51,8 @@ Arguments In {T} m k/.
 Definition in_ {T} (m : to T) k := match find m k with Some _ => true | None => false end.
 Arguments in_ {T} m k/.
 
-Lemma in_spec {T} (m : to T) k :
-  Reflect.Bool (In m k) (in_ m k).
+Lemma in_spec {T} (m : to T) k
+  : Reflect.Bool (In m k) (in_ m k).
 Proof.
   unfold In. unfold in_. destruct (find_spec m k); constructor. { eexists. exact Y. }
   intros [v M]. apply N in M as [].
@@ -210,7 +210,7 @@ Definition Add {T} k v (m m' : to T) : Prop :=
 Arguments Add {T} k v m m'/.
 
 (* Cool etymology: <https://www.etymonline.com/word/override>
- * And regarding distinction with "overwrite" (nowhere online has sources, but I think it makes sense):
+ * And regarding distinction with "overwrite" (nowhere online has sources, but I think it makes sense),
  * <https://stackoverflow.com/questions/8651562/overwrite-or-override> *)
 Definition overriding_add : forall T, Name.name -> T -> to T -> to T := @MapCore.add.
 Arguments overriding_add {T} k v m : simpl never.
