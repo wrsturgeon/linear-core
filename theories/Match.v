@@ -66,30 +66,34 @@ Qed.
 
 
 
-Variant Pattern : Pattern.pattern -> Term.term -> Map.to Term.term -> Prop :=
-  | Nam name term matches (S : Map.Singleton name term matches)
-      : Pattern (Pattern.Nam name) term matches
-  | Pat strict term matches (strict_matched : Strict strict term matches)
-      : Pattern (Pattern.Pat strict) term matches
-  .
-Arguments Pattern pattern term matches.
+(* TODO: match a reference. requires context. *)
 
-Definition pattern patt term :=
-  match patt with
-  | Pattern.Nam name => Some (Map.singleton name term)
-  | Pattern.Pat s => strict s term
-  end.
 
-Lemma pattern_det patt term
-  matches1 (S1 : Pattern patt term matches1)
-  matches2 (S2 : Pattern patt term matches2)
-  : Map.Eq matches1 matches2.
-Proof. invert S1; invert S2. { eapply Map.singleton_det; eassumption. } eapply strict_det; eassumption. Qed.
 
-Lemma pattern_spec patt term
-  : Reflect.Option (Pattern patt term) (pattern patt term).
-Proof.
-  destruct patt; cbn. { constructor. constructor. apply Map.singleton_singleton. }
-  destruct (strict_spec strict0 term); constructor. { constructor. exact Y. }
-  intros m C. invert C. apply N in strict_matched as [].
-Qed.
+(*Variant Pattern : Pattern.pattern -> Term.term -> Map.to Term.term -> Prop :=*)
+(*  | Nam name term matches (S : Map.Singleton name term matches)*)
+(*      : Pattern (Pattern.Nam name) term matches*)
+(*  | Pat strict term matches (strict_matched : Strict strict term matches)*)
+(*      : Pattern (Pattern.Pat strict) term matches*)
+(*  .*)
+(*Arguments Pattern pattern term matches.*)
+(**)
+(*Definition pattern patt term :=*)
+(*  match patt with*)
+(*  | Pattern.Nam name => Some (Map.singleton name term)*)
+(*  | Pattern.Pat s => strict s term*)
+(*  end.*)
+(**)
+(*Lemma pattern_det patt term*)
+(*  matches1 (S1 : Pattern patt term matches1)*)
+(*  matches2 (S2 : Pattern patt term matches2)*)
+(*  : Map.Eq matches1 matches2.*)
+(*Proof. invert S1; invert S2. { eapply Map.singleton_det; eassumption. } eapply strict_det; eassumption. Qed.*)
+(**)
+(*Lemma pattern_spec patt term*)
+(*  : Reflect.Option (Pattern patt term) (pattern patt term).*)
+(*Proof.*)
+(*  destruct patt; cbn. { constructor. constructor. apply Map.singleton_singleton. }*)
+(*  destruct (strict_spec strict0 term); constructor. { constructor. exact Y. }*)
+(*  intros m C. invert C. apply N in strict_matched as [].*)
+(*Qed.*)

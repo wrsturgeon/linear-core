@@ -42,7 +42,6 @@ define escape_str
 '$(subst ',\',$(subst $(NEWLINE),\n,$(1)))'
 endef
 
-# Main target:
 build:
 
 install:
@@ -57,11 +56,11 @@ install:
 %: $(COQMK) .gitignore
 	+$(MAKE) $(MAKE_FLAGS) -f $< $@
 
+$(THIS_MAKEFILE):
+	if [ -f $@ ]; then :; else echo '`$(THIS_MAKEFILE)` missing!'; exit 1; fi
+
 $(COQMK):
 	if [ -f $@ ]; then :; else echo '`$(COQMK)` missing!'; exit 1; fi
 
 .gitignore: $(THIS_MAKEFILE)
 	echo -e $(call escape_str,$(GIT_IGNORE)) > $@
-
-$(THIS_MAKEFILE):
-	if [ -f $@ ]; then :; else echo '`$(THIS_MAKEFILE)` missing!'; exit 1; fi

@@ -13,10 +13,11 @@ endef
 build: ocaml
 
 # This target compiles and verifies the whole Coq source,
-# but all we care about in the long term is that it
-# creates the OCaml source directory as a byproduct:
+# so why name it `ocaml`?
+# All we care about in the long term is that it
+# creates the OCaml source directory as a byproduct.
 ocaml: $(MCOQ)
-	+$(MAKE) $(MAKE_FLAGS) -f $< # theories/Extract.vo # $@
+	+$(MAKE) $(MAKE_FLAGS) -f $<
 
 clean: $(MCOQ)
 	+$(MAKE) $(MAKE_FLAGS) -f $< cleanall

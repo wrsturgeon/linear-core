@@ -38,27 +38,44 @@ Qed.
 
 
 
+Variant MoveOrReference : forall (pattern : Pattern.move_or_reference) (name : Name.name), Prop :=
+  | MMov strict name (bound_in_strict : Strict strict name)
+      : MoveOrReference (Pattern.Mov strict) name
+  | MRef strict name (bound_in_strict : Strict strict name)
+      : MoveOrReference (Pattern.Ref strict) name
+  .
+
+Definition move_or_reference p : Map.set :=
+  match p with Pattern.Mov s | Pattern.Ref s => strict s end.
+
+Lemma move_or_reference_spec : Reflect MoveOrReference move_or_reference. Proof.
+  assert (S := strict_spec). cbn in S. intros [] x; cbn; rewrite S;
+  (split; intro H; [constructor; exact H | invert H; assumption]).
+Qed.
+
+
+
 Variant Pattern : forall (pattern : Pattern.pattern) (name : Name.name), Prop :=
   | PNam name
       : Pattern (Pattern.Nam name) name
-  | PPat strict name (bound_in_strict : Strict strict name)
-      : Pattern (Pattern.Pat strict) name
+  | PPat move_or_reference name (bound_in_move_or_reference : MoveOrReference move_or_reference name)
+      : Pattern (Pattern.Pat move_or_reference) name
   .
 
 Definition pattern p : Map.set :=
   match p with
   | Pattern.Nam name => Map.singleton name tt
-  | Pattern.Pat s => strict s
+  | Pattern.Pat mr => move_or_reference mr
   end.
 
 Lemma pattern_spec : Reflect Pattern pattern. Proof.
   split.
   - intro I. generalize dependent x. induction t; intros; cbn in *.
     + apply Map.in_singleton in I as ->. constructor.
-    + constructor. apply strict_spec. exact I.
+    + constructor. apply move_or_reference_spec. exact I.
   - intro S. invert S; cbn.
     + apply Map.in_singleton. reflexivity.
-    + apply strict_spec. exact bound_in_strict.
+    + apply move_or_reference_spec. exact bound_in_move_or_reference.
 Qed.
 
 
