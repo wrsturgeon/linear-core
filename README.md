@@ -1,5 +1,6 @@
-# Linear Core $\rightarrow \cdot$
-#### Core semantics for a lazy functional programming language with dependent types and linear resources.
+# Linear Core
+
+Core semantics for a lazy functional programming language with dependent types and linear resources.
 
 
 
