@@ -2,11 +2,52 @@
 
 Core semantics for a lazy functional programming language with dependent types and linear resources.
 
+At a glance, here's the abstract syntax tree in Backus-Naur form:
+
+Terms and types:
+```ebnf
+<term> ::=
+  | Error
+  | Type
+  | Proposition
+  | Constructor <constructor>
+  | Move <name>
+  | Reference <name>
+  | Application <term> <term>
+  | Forall <name> <term> <term>
+  | Case <pattern> <term> <term>
+```
+
+Patterns:
+```ebnf
+<pattern> ::=
+  | Bind <name>
+  | Inspect <move-or-reference>
+
+<move-or-reference> ::=
+  | MovePattern <strict-pattern>
+  | ReferencePattern <strict-pattern>
+
+<strict-pattern> ::=
+  | ConstructorPattern <constructor>
+  | ApplicationPattern <strict-pattern> <name>
+```
+
+Constructors:
+```ebnf
+<constructor> ::=
+  | Builtin <builtin-constructor>
+  | UserDefined <name>
+```
+
+Non-empty strings:
+```ebnf
+<name> ::= <character> <string>
+```
 
 
-## Terms
 
-#### [`Term.v`](/theories/Term.v)
+## Terms ([`Term.v`](/theories/Term.v))
 
 All terms are one of the following:
 - A **constructor**, with a unique identifier telling which constructor it is.
@@ -30,9 +71,7 @@ Most of this is standard, but two notable characteristics differ from standard p
 
 
 
-## Pattern-Matching
-
-#### [`Match.v`](/theories/Match.v)
+## Pattern-Matching ([`Match.v`](/theories/Match.v))
 
 The most basic kind of pattern is a **strict pattern**: a specific constructor applied to some named arguments.
 Internally, this is a nested structure: either *just* a constructor or *another* strict pattern applied to an extra named argument.
@@ -64,8 +103,7 @@ Name-binding is essentially a well-behaved substitute for arbitrary pointer addr
 
 
 
-## Context & Substitution
-#### `TODO`
+## Context & Substitution (`TODO`)
 
 Variables are **linear**: that is, each variable must be moved once and only once.
 During execution, until a variable is moved, references can view its structure arbitrarily many times.
