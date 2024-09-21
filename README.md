@@ -2,7 +2,7 @@
 
 Core semantics for a lazy functional programming language with dependent types and linear resources.
 
-At a glance, here's the abstract syntax tree in Backus-Naur form:
+At a glance, here's the abstract syntax tree, defined similarly to Backus-Naur form:
 
 Terms and types:
 ```ebnf
