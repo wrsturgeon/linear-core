@@ -50,10 +50,11 @@ Inductive Step (context : Context.context) : Term.term -> Context.context -> Ter
       pattern (compatible_names : Match.Compatible context pattern)
       scrutinee (safe_names : forall x (U : UsedIn.Term scrutinee x) (B : BoundIn.Pattern pattern x), False)
       (no_match : forall context_with_matches (M : Match.Pattern context pattern scrutinee context_with_matches), False)
-      shape (scrutinee_reduced : Shape.Shape shape scrutinee) body_if_match other_cases
-      : Step
-        context (Term.App (Term.Cas pattern body_if_match other_cases) scrutinee)
-        context (Term.App other_cases scrutinee)
+      shape (scrutinee_reduced : Shape.Shape shape scrutinee)
+      unchanged_context (context_unchanged : Map.Eq context unchanged_context) body_if_match other_cases
+      : Step context
+        (Term.App (Term.Cas pattern body_if_match other_cases) scrutinee) unchanged_context
+        (Term.App other_cases scrutinee)
   | ApR
       pattern scrutinee (not_yet_safe_to_match
         : ~Match.Compatible context pattern \/ exists x, UsedIn.Term scrutinee x /\ BoundIn.Pattern pattern x)
@@ -71,9 +72,10 @@ Inductive Step (context : Context.context) : Term.term -> Context.context -> Ter
         : Map.BulkOverwrite new_names (Map.to_self (UsedIn.term other_cases)) map_other_cases)
       renamed_other_cases (rename_other_cases
         : Rename.Term map_other_cases other_cases renamed_other_cases)
-      : Step
-        context (Term.App (Term.Cas pattern body_if_match other_cases) scrutinee)
-        context (Term.App (Term.Cas renamed_pattern renamed_body_if_match renamed_other_cases) scrutinee)
+      unchanged_context (context_unchanged : Map.Eq context unchanged_context)
+      : Step context
+        (Term.App (Term.Cas pattern body_if_match other_cases) scrutinee) unchanged_context
+        (Term.App (Term.Cas renamed_pattern renamed_body_if_match renamed_other_cases) scrutinee)
     .
 Arguments Step context term updated_context updated_term.
 
@@ -90,7 +92,7 @@ Qed.
 
 
 
-Theorem step_det
+Theorem det
   {c1 t1 c1' t1'} (S1 : Step c1 t1 c1' t1')
   {c2} (Ec : Map.Eq c1 c2)
   {t2} (Et : t1 = t2)
@@ -127,7 +129,8 @@ Proof.
     + contradiction (no_match c2'). eapply Match.pattern_eq; try reflexivity; try eassumption. 2: { apply Map.eq_refl. }
       apply Map.eq_sym. exact Ec.
     + eapply shapes_cant_step in scrutinee_reduced as []. eassumption.
-    + split. { exact Ec. } reflexivity.
+    + split. 2: { reflexivity. } eapply Map.eq_trans. { apply Map.eq_sym. exact context_unchanged. }
+      eapply Map.eq_trans. { exact Ec. } exact context_unchanged0.
     + destruct not_yet_safe_to_match as [N | N].
       * contradiction N. eapply Match.compatible_eq; try reflexivity; eassumption.
       * destruct N as [x [U B]]. edestruct safe_names. { exact U. } exact B.
@@ -141,9 +144,11 @@ Proof.
     + destruct not_yet_safe_to_match as [N | N].
       * contradiction N. eapply Match.compatible_eq; try reflexivity; try eassumption. apply Map.eq_sym. assumption.
       * destruct N as [x [U B]]. edestruct safe_names. { exact U. } exact B.
-    + split. { exact Ec. } f_equal. assert (Eng : Map.Eq (NewNames.generate reserved (BoundIn.pattern pattern))
+    + split. { eapply Map.eq_trans. { apply Map.eq_sym. exact context_unchanged. }
+        eapply Map.eq_trans. { exact Ec. } exact context_unchanged0. }
+      f_equal. assert (Eng : Map.Eq (NewNames.generate reserved (BoundIn.pattern pattern))
         (NewNames.generate reserved0 (BoundIn.pattern pattern))). {
-        apply NewNames.generate_det. 2: { apply Map.eq_refl. }
+        erewrite NewNames.generate_det. { apply Map.eq_refl. } 2: { apply Map.eq_refl. }
         eapply Map.union_det; try eassumption.
         * split; intro F; apply Map.find_domain; apply Map.find_domain in F;
           eapply Map.in_eq; try exact F. { apply Map.eq_sym. exact Ec. } exact Ec.
@@ -156,4 +161,63 @@ Proof.
         eapply Map.bulk_overwrite_det; try eassumption. apply Map.eq_refl.
       * eapply Rename.term_det; try reflexivity; try eassumption.
         eapply Map.bulk_overwrite_det; try eassumption. apply Map.eq_refl.
+Qed.
+
+
+
+Lemma eq
+  {c1 t1 c1' t1'} (S1 : Step c1 t1 c1' t1')
+  {c2} (Ec : Map.Eq c1 c2)
+  {t2} (Et : t1 = t2)
+  {c2'} (Ec' : Map.Eq c1' c2')
+  {t2'} (Et' : t1' = t2')
+  : Step c2 t2 c2' t2'.
+Proof.
+  subst. rename t2 into t. rename t2' into t'. generalize dependent c2'. generalize dependent c2.
+  induction S1; cbn in *; intros.
+  - constructor. { apply Ec. exact lookup. } destruct no_contraction as [I R]. split.
+    + eapply Map.in_eq. { apply Map.eq_sym. exact Ec. } eexists. exact lookup.
+    + intros x y. rewrite <- Ec'. rewrite <- Ec. apply R.
+  - econstructor.
+    + apply Ec. exact lookup.
+    + destruct remove_self_from_context as [I R]. split.
+      * eapply Map.in_eq. { apply Map.eq_sym. exact Ec. } exact I.
+      * intros x y. rewrite R. rewrite Ec. reflexivity.
+    + exact S1.
+    + exact not_overwriting_self.
+    + intros x y. rewrite <- Ec'. apply update.
+  - constructor.
+    + eapply Match.compatible_eq; try reflexivity; eassumption.
+    + intros. eapply safe_names; eassumption.
+    + eapply Match.pattern_eq; try reflexivity; eassumption.
+  - constructor.
+    + eapply Match.compatible_eq; try reflexivity; eassumption.
+    + intros. eapply safe_names; eassumption.
+    + intros. eapply no_match. eapply Match.pattern_eq; try reflexivity;
+      try eassumption. { apply Map.eq_sym. eassumption. } apply Map.eq_refl.
+    + apply IHS1; eassumption.
+  - econstructor.
+    + eapply Match.compatible_eq; try reflexivity; eassumption.
+    + intros. eapply safe_names; eassumption.
+    + intros. eapply no_match. eapply Match.pattern_eq; try reflexivity;
+      try eassumption. { apply Map.eq_sym. eassumption. } apply Map.eq_refl.
+    + apply scrutinee_reduced.
+    + eapply Map.eq_trans. { apply Map.eq_sym. exact Ec. }
+      eapply Map.eq_trans. { exact context_unchanged. } exact Ec'.
+  - econstructor.
+    + destruct not_yet_safe_to_match as [N | [x [U B]]]; [left | right].
+      * intro C. apply N. eapply Match.compatible_eq. { exact C. } 2: { reflexivity. }
+        apply Map.eq_sym. exact Ec.
+      * exists x. split. { exact U. } exact B.
+    + exact all_other_used_names.
+    + intros x y. rewrite union_into_reserved. fold (Map.domain context). repeat rewrite Map.find_domain.
+      erewrite Map.in_eq. { reflexivity. } exact Ec.
+    + eassumption.
+    + eapply Rename.pattern_eq; try reflexivity; try eassumption. apply Map.eq_refl.
+    + eassumption.
+    + eassumption.
+    + eassumption.
+    + eassumption.
+    + eapply Map.eq_trans. { apply Map.eq_sym. exact Ec. }
+      eapply Map.eq_trans. { exact context_unchanged. } exact Ec'.
 Qed.

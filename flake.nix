@@ -158,7 +158,7 @@
 
                 set -eu
 
-                if ${rg} 'Admitted|Axiom|Conjecture|Parameter|Hypothesis|Hypotheses|Variable' -g '*.v' -g '!theories/NewName.v'; then
+                if ${rg} 'Admitted|Axiom|Conjecture|Parameter|Hypothesis|Hypotheses|Variable' -g '*.v' -g '!theories/NewNames.v'; then
                   echo
                   echo 'SYNTAX ERROR: unverified assumption (above)'
                   exit 1

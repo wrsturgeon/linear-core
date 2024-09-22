@@ -1,4 +1,5 @@
 From LinearCore Require Import
+  Halt
   Invert
   .
 
@@ -18,6 +19,17 @@ Variant Option {T} (P : T -> Prop) : option T -> Prop :=
       : Option P (Some x)
   | N (N : forall x, ~P x)
       : Option P None
+  .
+
+
+
+Variant Halt {T} (P : T -> Prop) : Halt.halt T -> Prop :=
+  | R x (Y : P x)
+      : Halt P (Halt.Return x)
+  | E (N : forall x, ~P x)
+      : Halt P Halt.Exit
+  | O
+      : Halt P Halt.OutOfFuel
   .
 
 
@@ -56,7 +68,11 @@ Proof. invert Rp; invert Rq; constructor; tauto. Qed.
 
 
 
-Lemma opt_eq {T}
+Lemma option_eq {T}
   {Q P} (E : forall x : T, P x <-> Q x) opt
   : Option P opt <-> Option Q opt.
 Proof. split; intro R; (destruct R; constructor; [apply E; assumption |]); intros x C; eapply N0; apply E; exact C. Qed.
+
+Lemma option_if {T P opt} (R : @Option T P opt) t (E : opt = Some t)
+  : P t.
+Proof. destruct R. { invert E. exact Y. } discriminate E. Qed.

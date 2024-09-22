@@ -26,8 +26,8 @@ Inductive Strict (context : Context.context) : Pattern.strict -> Term.term -> Co
   .
 Arguments Strict context strict scrutinee context_with_matches.
 
-Fixpoint strict context pattern scrutinee : option Context.context :=
-  match pattern, scrutinee with
+Fixpoint strict context strict_pattern scrutinee : option Context.context :=
+  match strict_pattern, scrutinee with
   | Pattern.Ctr constructor_pattern, Term.Ctr constructor =>
       if Constructor.eq constructor_pattern constructor then Some context else None
   | Pattern.App function_pattern argument_name, Term.App function argument =>
@@ -67,15 +67,15 @@ Proof.
     eapply Map.add_eq; try reflexivity; try eassumption. apply Map.eq_refl.
 Qed.
 
-Lemma strict_spec context pattern scrutinee
-  : Reflect.Option (Strict context pattern scrutinee) (strict context pattern scrutinee).
+Lemma strict_spec context strict_pattern scrutinee
+  : Reflect.Option (Strict context strict_pattern scrutinee) (strict context strict_pattern scrutinee).
 Proof.
-  generalize dependent scrutinee. induction pattern; intros;
+  generalize dependent scrutinee. induction strict_pattern; intros;
   destruct scrutinee; try solve [constructor; intros t C; invert C].
   - unfold strict. destruct (Constructor.eq_spec constructor constructor0); constructor.
     + subst. constructor. apply Map.eq_refl.
     + intros t C. invert C. apply N. reflexivity.
-  - simpl strict. destruct (IHpattern scrutinee1) as [function_matches function_matched | N]. 2: {
+  - simpl strict. destruct (IHstrict_pattern scrutinee1) as [function_matches function_matched | N]. 2: {
       constructor. intros t C. invert C. apply N in function_matched as []. }
     destruct (Map.find_spec function_matches argument) as [duplicated F | N]. 2: {
       constructor. econstructor. { eassumption. } { intros [y F]. apply N in F as []. }
@@ -125,6 +125,17 @@ Qed.
 Lemma compatible_strict_eq {c1 p1} (C : CompatibleStrict c1 p1) {c2} (Ec : Map.Eq c1 c2) {p2} (Ep : p1 = p2)
   : CompatibleStrict c2 p2.
 Proof. subst. intros x I B. eapply C. { eapply Map.in_eq. { exact Ec. } exact I. } exact B. Qed.
+
+Definition compatible_strict (context : Context.context) strict :=
+  Map.disjoint context (BoundIn.strict strict).
+Arguments compatible_strict context strict/.
+
+Lemma compatible_strict_spec context strict
+  : Reflect.Bool (CompatibleStrict context strict) (compatible_strict context strict).
+Proof.
+  eapply Reflect.bool_eq. 2: { apply Map.disjoint_spec. }
+  split; intros F k I B; (eapply F; [exact I |]); apply BoundIn.strict_spec; exact B.
+Qed.
 
 
 
@@ -416,6 +427,23 @@ Lemma compatible_move_or_reference_eq {c1 p1} (C : CompatibleMoveOrReference c1 
   : CompatibleMoveOrReference c2 p2.
 Proof. subst. invert C; constructor; eapply compatible_strict_eq; try reflexivity; eassumption. Qed.
 
+Definition compatible_move_or_reference (context : Context.context) move_or_reference :=
+  Map.disjoint context (BoundIn.move_or_reference move_or_reference).
+Arguments compatible_move_or_reference context move_or_reference/.
+
+Lemma compatible_move_or_reference_spec context move_or_reference
+  : Reflect.Bool
+    (CompatibleMoveOrReference context move_or_reference)
+    (compatible_move_or_reference context move_or_reference).
+Proof.
+  eapply Reflect.bool_eq. 2: { apply Map.disjoint_spec. }
+  destruct move_or_reference; (split; intro F; [invert F | constructor]); intros k I B.
+  - eapply strict_compatible. { exact I. } apply BoundIn.strict_spec. exact B.
+  - eapply F. { exact I. } apply BoundIn.strict_spec. exact B.
+  - eapply strict_compatible. { exact I. } apply BoundIn.strict_spec. exact B.
+  - eapply F. { exact I. } apply BoundIn.strict_spec. exact B.
+Qed.
+
 
 
 Variant Pattern (context : Context.context) : Pattern.pattern -> Term.term -> Context.context -> Prop :=
@@ -473,6 +501,19 @@ Proof.
     intros ctx C. invert C. apply N in move_or_reference_matched as [].
 Qed.
 
+Lemma pattern_iff context patt scrutinee context_with_matches
+  : Pattern context patt scrutinee context_with_matches <-> exists context_with_matches', (
+    pattern context patt scrutinee = Some context_with_matches' /\ Map.Eq context_with_matches' context_with_matches).
+Proof.
+  destruct (pattern_spec context patt scrutinee). 2: {
+    split. { intro P. apply N in P as []. } intros [context_with_matches' [D E]]. discriminate D. }
+  split.
+  - intro P. eexists. split. { reflexivity. }
+    eapply pattern_det; try reflexivity; try eassumption. apply Map.eq_refl.
+  - intros [context_with_matches' [tmp E]]. invert tmp.
+    eapply pattern_eq; try reflexivity; try eassumption. apply Map.eq_refl.
+Qed.
+
 Variant Compatible context : Pattern.pattern -> Prop :=
   | CNam name (N : forall (I : Map.In context name), False)
       : Compatible context (Pattern.Nam name)
@@ -485,4 +526,24 @@ Lemma compatible_eq {c1 p1} (C : Compatible c1 p1) {c2} (Ec : Map.Eq c1 c2) {p2}
 Proof.
   subst. invert C. { constructor. intro I. apply N. eapply Map.in_eq. { exact Ec. } exact I. }
   constructor. eapply compatible_move_or_reference_eq; try reflexivity; eassumption.
+Qed.
+
+Definition compatible (context : Context.context) pattern :=
+  Map.disjoint context (BoundIn.pattern pattern).
+Arguments compatible context pattern/.
+
+Lemma compatible_spec context pattern
+  : Reflect.Bool
+    (Compatible context pattern)
+    (compatible context pattern).
+Proof.
+  eapply Reflect.bool_eq. 2: { apply Map.disjoint_spec. } split; intro F.
+  - invert F.
+    + intros k I B. apply N. apply Map.in_singleton in B as ->. exact I.
+    + intros k I B. invert move_or_reference_compatible; (eapply strict_compatible; [exact I |]);
+      apply BoundIn.strict_spec; exact B.
+  - destruct pattern; simpl BoundIn.pattern in *.
+    + constructor. intro I. eapply F. { exact I. } apply Map.in_singleton. reflexivity.
+    + constructor. destruct move_or_reference0; simpl BoundIn.move_or_reference in *; constructor;
+      intros k I B; (eapply F; [exact I |]); apply BoundIn.strict_spec; exact B.
 Qed.

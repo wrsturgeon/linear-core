@@ -1,7 +1,9 @@
 From LinearCore Require
+  BoundIn
   Name
   Term
   UsedIn
+  WellFormed
   .
 From LinearCore Require Import
   Invert
@@ -13,28 +15,43 @@ Inductive Strict (lookup : Map.to Name.name) : Pattern.strict -> Pattern.strict 
   | SCtr ctor
       : Strict lookup (Pattern.Ctr ctor) (Pattern.Ctr ctor)
   | SApp
-      curried renamed_curried (rename_curried : Strict lookup curried renamed_curried)
-      argument renamed_argument (rename_argument : Map.Find lookup argument renamed_argument)
+      argument renamed_argument unused (rename_argument : Map.Pop lookup argument renamed_argument unused)
+      curried renamed_curried (rename_curried : Strict unused curried renamed_curried)
       : Strict lookup (Pattern.App curried argument) (Pattern.App renamed_curried renamed_argument)
   .
 Arguments Strict lookup strict renamed_strict.
+
+Lemma strict_eq
+  {l1 s1 r1} (S1 : Strict l1 s1 r1)
+  {l2} (El : Map.Eq l1 l2)
+  {s2} (Es : s1 = s2)
+  {r2} (Er : r1 = r2)
+  : Strict l2 s2 r2.
+Proof.
+  subst. generalize dependent l2. induction S1; intros. { constructor. }
+  econstructor. { eapply Map.pop_eq; try reflexivity; try eassumption. apply Map.eq_refl. } exact S1.
+Qed.
 
 Fixpoint strict lookup s :=
   match s with
   | Pattern.Ctr ctor => Some s
   | Pattern.App curried argument =>
-      match strict lookup curried with None => None | Some renamed_curried =>
-        option_map (Pattern.App renamed_curried) (Map.find lookup argument)
+      match Map.pop lookup argument with None => None | Some (renamed_argument, unused) =>
+        match strict unused curried with None => None | Some renamed_curried =>
+          Some (Pattern.App renamed_curried renamed_argument)
+        end
       end
   end.
 
 Lemma strict_spec lookup s
   : Reflect.Option (Strict lookup s) (strict lookup s).
 Proof.
-  induction s; cbn in *. { constructor. constructor. }
-  destruct IHs. 2: { constructor. intros t S. invert S. apply N in rename_curried as []. }
-  destruct (Map.find_spec lookup argument); constructor. { constructor; assumption. }
-  intros s' S. invert S. apply N in rename_argument as [].
+  generalize dependent lookup. induction s; intros; cbn in *. { constructor. constructor. }
+  fold (Map.pop lookup argument). destruct (Map.pop_spec lookup argument) as [[renamed_argument unused] |]. 2: {
+    constructor. intros p S. invert S. apply (N (_, _)) in rename_argument as []. }
+  specialize (IHs unused). destruct IHs; constructor. { econstructor. { exact Y. } exact Y0. }
+  intros p C. invert C. eapply N. eapply strict_eq; try reflexivity. { exact rename_curried. }
+  eapply Map.pop_det; try reflexivity; try eassumption. apply Map.eq_refl.
 Qed.
 
 Lemma strict_det
@@ -46,8 +63,42 @@ Lemma strict_det
 Proof.
   subst. generalize dependent r2. generalize dependent l2.
   induction S1; intros; invert S2. { reflexivity. }
-  f_equal. { eapply IHS1. { exact El. } exact rename_curried. }
-  eapply Map.find_det; try eassumption. apply El. assumption.
+  destruct (Map.pop_det rename_argument El eq_refl rename_argument0) as [<- Eu].
+  f_equal. eapply IHS1. { exact Eu. } exact rename_curried.
+Qed.
+
+Definition CompatibleStrict (lookup : Map.to Name.name) strict : Prop :=
+  WellFormed.Strict strict /\
+  Map.Subset (BoundIn.strict strict) (Map.domain lookup).
+
+Lemma compatible_if_strict {lookup strict renamed_strict} (S : Strict lookup strict renamed_strict)
+  : CompatibleStrict lookup strict.
+Proof.
+  induction S. { split. { constructor. } intros k v F. invert F. } destruct IHS as [WF SS]. constructor.
+  - constructor. { exact WF. } intro B. apply BoundIn.strict_spec in B as [[] B]. apply SS in B.
+    apply Map.find_domain in B as [name B]. apply rename_argument in B as [N _]. apply N. reflexivity.
+  - intros k v F. apply Map.find_domain. cbn in F. apply Map.find_overriding_add in F as [[-> ->] | [N F]].
+    + destruct rename_argument as [F R]. eexists. exact F.
+    + apply SS in F. apply Map.find_domain in F as [name F]. apply rename_argument in F as [Nk F]. eexists. exact F.
+Qed.
+
+Lemma strict_iff_compatible lookup strict
+  : CompatibleStrict lookup strict <->
+    exists renamed_strict, Strict lookup strict renamed_strict.
+Proof.
+  generalize dependent lookup. induction strict; intros.
+  - split. { intros [WF S]. eexists. constructor. }
+    intros [renamed_strict S]. split. { constructor. } intros k v F. invert F.
+  - split. 2: { intros [renamed_strict S]. eapply compatible_if_strict. exact S. }
+    intros [WF S]. invert WF. assert (A := S). eapply Map.find_domain in A as [renamed_argument A]. 2: {
+      apply Map.find_overriding_add. left. split; reflexivity. }
+    assert (C : CompatibleStrict (Map.remove argument lookup) strict0). { split. { exact curried_well_formed. }
+      intros k v F. apply Map.find_domain. eapply Map.in_remove_if_present. { apply Map.remove_if_present_remove. }
+      assert (Nk : k <> argument). { intros ->. apply N. apply BoundIn.strict_spec. eexists. exact F. }
+      split. { exact Nk. } eapply Map.find_domain. apply S. cbn. apply Map.find_overriding_add.
+      right. split. { exact Nk. } exact F. }
+    apply IHstrict in C as [renamed_strict C]. eexists. econstructor. 2: { exact C. }
+    split. { exact A. } apply Map.remove_if_present_remove.
 Qed.
 
 
@@ -80,6 +131,31 @@ Lemma move_or_reference_det
   : r1 = r2.
 Proof. invert MR1; invert MR2; f_equal; eapply strict_det; try reflexivity; eassumption. Qed.
 
+Lemma move_or_reference_eq
+  {l1 mr1 r1} (MR1 : MoveOrReference l1 mr1 r1)
+  {l2} (El : Map.Eq l1 l2)
+  {mr2} (Emr : mr1 = mr2)
+  {r2} (Er : r1 = r2)
+  : MoveOrReference l2 mr2 r2.
+Proof. subst. invert MR1; constructor; eapply strict_eq; try reflexivity; eassumption. Qed.
+
+Variant CompatibleMoveOrReference lookup : Pattern.move_or_reference -> Prop :=
+  | CMov strict (CS : CompatibleStrict lookup strict)
+      : CompatibleMoveOrReference lookup (Pattern.Mov strict)
+  | CRef strict (CS : CompatibleStrict lookup strict)
+      : CompatibleMoveOrReference lookup (Pattern.Ref strict)
+  .
+
+Lemma move_or_reference_iff_compatible lookup move_or_reference
+  : CompatibleMoveOrReference lookup move_or_reference <->
+    exists renamed_move_or_reference, MoveOrReference lookup move_or_reference renamed_move_or_reference.
+Proof.
+  split.
+  - intro C. invert C; apply strict_iff_compatible in CS as [renamed_strict S]; eexists; constructor; exact S.
+  - intros [renamed_move_or_reference MR].
+    invert MR; constructor; apply strict_iff_compatible; eexists; exact rename_strict.
+Qed.
+
 
 
 Variant Pattern lookup : Pattern.pattern -> Pattern.pattern -> Prop :=
@@ -89,17 +165,18 @@ Variant Pattern lookup : Pattern.pattern -> Pattern.pattern -> Prop :=
       (rename_move_or_reference : MoveOrReference lookup move_or_reference renamed_move_or_reference)
       : Pattern lookup (Pattern.Pat move_or_reference) (Pattern.Pat renamed_move_or_reference)
   .
+Arguments Pattern lookup pattern renamed_pattern.
 
-Definition pattern lookup p :=
-  match p with
+Definition pattern lookup patt :=
+  match patt with
   | Pattern.Nam name => option_map Pattern.Nam (Map.find lookup name)
   | Pattern.Pat mr => option_map Pattern.Pat (move_or_reference lookup mr)
   end.
 
-Lemma pattern_spec lookup p
-  : Reflect.Option (Pattern lookup p) (pattern lookup p).
+Lemma pattern_spec lookup patt
+  : Reflect.Option (Pattern lookup patt) (pattern lookup patt).
 Proof.
-  destruct p; cbn in *.
+  destruct patt; cbn in *.
   - destruct (Map.find_spec lookup name); constructor. { constructor. exact Y. }
     intros p P. invert P. apply N in rename_name as [].
   - destruct (move_or_reference_spec lookup move_or_reference0); constructor. { constructor. exact Y. }
@@ -115,6 +192,46 @@ Lemma pattern_det
 Proof.
   invert P1; invert P2; f_equal. { eapply Map.find_det. { eassumption. } apply El. assumption. }
   eapply move_or_reference_det; try reflexivity; eassumption.
+Qed.
+
+Lemma pattern_eq
+  {l1 p1 r1} (P1 : Pattern l1 p1 r1)
+  {l2} (El : Map.Eq l1 l2)
+  {p2} (Ep : p1 = p2)
+  {r2} (Er : r1 = r2)
+  : Pattern l2 p2 r2.
+Proof.
+  subst. invert P1; constructor. { apply El. exact rename_name. }
+  eapply move_or_reference_eq; try reflexivity; eassumption.
+Qed.
+
+Lemma pattern_iff lookup patt renamed_patt
+  : Pattern lookup patt renamed_patt <-> pattern lookup patt = Some renamed_patt.
+Proof.
+  destruct (pattern_spec lookup patt).
+  - split. 2: { intro E. invert E. exact Y. }
+    intro P. f_equal. eapply pattern_det; try reflexivity; try eassumption. apply Map.eq_refl.
+  - split. { intro P. apply N in P as []. } intro D. discriminate D.
+Qed.
+
+Variant CompatiblePattern lookup : Pattern.pattern -> Prop :=
+  | CNam name (I : Map.In lookup name)
+      : CompatiblePattern lookup (Pattern.Nam name)
+  | CPat move_or_reference (C : CompatibleMoveOrReference lookup move_or_reference)
+      : CompatiblePattern lookup (Pattern.Pat move_or_reference)
+  .
+
+Lemma pattern_iff_compatible lookup pattern
+  : CompatiblePattern lookup pattern <->
+    exists renamed_pattern, Pattern lookup pattern renamed_pattern.
+Proof.
+  split.
+  - intro CP. invert CP.
+    + destruct I as [y F]. eexists. constructor. exact F.
+    + apply move_or_reference_iff_compatible in C as [renamed_move_or_reference C].
+      eexists. constructor. exact C.
+  - intros [renamed_pattern P]. invert P. { constructor. eexists. exact rename_name. }
+    constructor. apply move_or_reference_iff_compatible. eexists. exact rename_move_or_reference.
 Qed.
 
 
@@ -155,7 +272,7 @@ Arguments Term lookup term renamed.
 
 
 
-Lemma eq {l1 t1 y1} (R1 : Term l1 t1 y1)
+Lemma term_eq {l1 t1 y1} (R1 : Term l1 t1 y1)
   {l2} (El : Map.Eq l1 l2)
   {t2} (Et : t1 = t2)
   {y2} (Ey : y1 = y2)
@@ -182,8 +299,8 @@ Definition RenameableTerm (lookup : Map.to Name.name) term : Prop :=
   forall x (U : UsedIn.Term term x), Map.In lookup x.
 Arguments RenameableTerm lookup term/.
 
-Lemma renameable_term lookup term :
-  (exists renamed, Term lookup term renamed) <-> RenameableTerm lookup term.
+Lemma renameable_term lookup term
+  : (exists renamed, Term lookup term renamed) <-> RenameableTerm lookup term.
 Proof.
   cbn. split.
   - intros [renamed R]; intros. induction R.
@@ -262,7 +379,7 @@ Proof.
   - destruct (IHt1 lookup). 2: { constructor. intros t C. invert C. apply N in type_renaming as []. }
     destruct (IHt2 (Map.overriding_add variable variable lookup)); constructor. {
       econstructor; try eassumption. apply Map.overwrite_if_present_overwrite. }
-    intros t C. invert C. eapply N. eapply eq; try reflexivity; try eassumption.
+    intros t C. invert C. eapply N. eapply term_eq; try reflexivity; try eassumption.
     eapply Map.overwrite_if_present_det; try reflexivity; try eassumption. { apply Map.eq_refl. }
     apply Map.overwrite_if_present_overwrite.
   - destruct (IHt2 lookup). 2: { constructor. intros t C. invert C. apply N in other_cases_renaming as []. }
@@ -270,7 +387,7 @@ Proof.
     destruct (IHt1 (Map.overriding_union (Map.to_self (BoundIn.pattern pattern0)) lookup)); constructor. {
       econstructor; try eassumption. { apply BoundIn.pattern_spec. } { apply Map.to_self_to_self. }
       apply Map.bulk_overwrite_bulk_overwrite. }
-    intros t R. invert R. eapply N. eapply eq; try reflexivity. { exact body_if_match_renaming. }
+    intros t R. invert R. eapply N. eapply term_eq; try reflexivity. { exact body_if_match_renaming. }
     eapply Map.bulk_overwrite_det. { exact not_shadowed. } 3: { apply Map.bulk_overwrite_bulk_overwrite. }
     2: { apply Map.eq_refl. } eapply Map.to_self_det; try eassumption. 2: { apply Map.to_self_to_self. }
     intros x' y'. split; intro F; (eassert (I : Map.In _ _); [eexists; exact F |]).
@@ -298,4 +415,13 @@ Proof.
     [apply find_pattern_bindings in I | apply find_pattern_bindings0 in I];
     [apply find_pattern_bindings0 in I | apply find_pattern_bindings in I];
     destruct I as [[] F']; exact F'.
+Qed.
+
+Lemma term_iff lookup t renamed_t
+  : Term lookup t renamed_t <-> term lookup t = Some renamed_t.
+Proof.
+  destruct (term_spec lookup t).
+  - split. 2: { intro E. invert E. exact Y. }
+    intro T. f_equal. eapply term_det; try reflexivity; try eassumption. apply Map.eq_refl.
+  - split. { intro T. apply N in T as []. } intro D. discriminate D.
 Qed.

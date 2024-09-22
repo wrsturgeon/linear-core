@@ -7,6 +7,7 @@ From LinearCore Require Import
   .
 
 Variant builtin : Set :=
+  | Reference
   .
 
 Definition builtin_eq (a b : builtin) := true.
@@ -14,7 +15,7 @@ Arguments builtin_eq a b/.
 
 Lemma builtin_eq_spec a b
   : Reflect.Bool (a = b) (builtin_eq a b).
-Proof. destruct a. Qed.
+Proof. destruct a; destruct b; constructor; try reflexivity. Qed.
 
 
 
@@ -34,6 +35,7 @@ Arguments eq a b/.
 Lemma eq_spec a b
   : Reflect.Bool (a = b) (eq a b).
 Proof.
-  destruct a as [a | a]; destruct b as [b | b]; try (constructor; tauto).
-  cbn. destruct (Name.spec a b); constructor. { subst. reflexivity. } intro C. apply N. invert C. reflexivity.
+  destruct a as [a | a]; destruct b as [b | b]; try (constructor; intro D; discriminate D); cbn.
+  - constructor. destruct a. destruct b. reflexivity.
+  - destruct (Name.spec a b); subst; constructor. { reflexivity. } intro E. apply N. invert E. reflexivity.
 Qed.

@@ -63,7 +63,7 @@ All terms are one of the following:
 
 Most of this is standard, but two notable characteristics differ from standard programming languages:
 - Match statements do not come packaged with their scrutinee.
-  In most languages, you'll see `match x with ...` or `match x { ...` or `case x of ...`.
+  In most languages, you'll see `match x with ...` or `match x { ...`.
   The interal AST doesn't follow that representation:
   instead, match statements are represented as an application of a standalone match statement to separate scrutinee.
   That is, with a syntax as close to the AST as possible, these statements might look like `(match ...) x`.
