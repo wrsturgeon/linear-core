@@ -1,5 +1,6 @@
 From LinearCore Require
   BoundIn
+  Context
   Name
   Term
   UsedIn
@@ -425,3 +426,10 @@ Proof.
     intro T. f_equal. eapply term_det; try reflexivity; try eassumption. apply Map.eq_refl.
   - split. { intro T. apply N in T as []. } intro D. discriminate D.
 Qed.
+
+
+
+Definition Context (lookup : Map.to Name.name) (context : Context.context) (renamed_context : Context.context) : Prop :=
+  forall k' v', Map.Find renamed_context k' v' <-> exists k, (Map.Find lookup k k' /\
+    exists v, (Term lookup v v' /\ Map.Find context k v)).
+Arguments Context lookup context renamed_context/.

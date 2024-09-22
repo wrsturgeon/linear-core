@@ -221,3 +221,17 @@ Proof.
     + eapply Map.eq_trans. { apply Map.eq_sym. exact Ec. }
       eapply Map.eq_trans. { exact context_unchanged. } exact Ec'.
 Qed.
+
+
+
+Theorem name_invariant {context term updated_context updated_term}
+  (original_stepped : Step context term updated_context updated_term)
+  {name_mappings renamed_term} (rename_term : Rename.Term name_mappings term renamed_term)
+  {renamed_context} (rename_context : Rename.Context name_mappings context renamed_context)
+  : exists updated_renamed_context updated_renamed_term,
+    Step renamed_context renamed_term updated_renamed_context updated_renamed_term /\
+    exists updated_name_mappings,
+      Rename.Term updated_name_mappings updated_term updated_renamed_term /\
+      Rename.Context updated_name_mappings updated_context updated_renamed_context.
+Proof.
+Abort.
