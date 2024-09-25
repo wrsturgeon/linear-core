@@ -1,9 +1,9 @@
 From LinearCore Require
-  DebugPrint
   Fuel
   Halt
   SmallStep
   Term
+  VerbosePrint
   .
 From LinearCore Require Import
   DollarSign
@@ -21,7 +21,7 @@ Definition to_string (h : Halt.halt (Context.context * Term.term)) : string :=
   end.
 
 Fixpoint step (fuel : Fuel.fuel) (context : Context.context) (term : Term.term) : Halt.halt (Context.context * Term.term) :=
-  DebugPrint.format to_string $
+  VerbosePrint.format to_string $
   match fuel with Fuel.Stop => Halt.OutOfFuel | Fuel.Continue fuel =>
     match term with
     | Term.Mov name =>

@@ -13,7 +13,7 @@ Definition string (side_effect : string) {T} (output : T) := output.
 Arguments string/ side_effect {T} output.
 
 Extract Constant string =>
-  "match Sys.getenv_opt verbose with None -> (fun _ x -> x) | Some _ -> (fun side_effect output -> print_endline side_effect; output)".
+  "match Sys.getenv_opt verbose_flag with None -> (fun _ x -> x) | Some _ -> (fun side_effect output -> print_endline side_effect; output)".
 Extraction NoInline string. (* to check the `VERBOSE` environment variable once and only once *)
 
 
