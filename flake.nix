@@ -51,7 +51,7 @@
                 "theories"
               ];
             };
-            propagatedBuildInputs = with context; [ mmaps ];
+            propagatedBuildInputs = (with context; [ mmaps ]) ++ (with context.coq-pkgs; [ equations ]);
             installPhase =
               let
                 coq-install-path = "lib/coq/${context.coq.coq-version}/user-contrib";

@@ -35,8 +35,9 @@ Arguments new_name_det {r1 r2} E orig_name.
 
 
 
+(* TODO: speed up by accumulating results of `range` call *)
 Definition generate_acc acc reserved : Map.set -> Map.to Name.name :=
-  Map.fold (fun k _ acc => Map.overriding_add k (new_name (Map.set_union reserved (Map.domain acc)) k) acc) acc.
+  Map.fold (fun k _ acc => Map.overriding_add k (new_name (Map.set_union reserved (Map.range acc)) k) acc) acc.
 Arguments generate_acc acc reserved names/.
 
 Definition generate : Map.set -> Map.set -> Map.to Name.name := generate_acc Map.empty.
@@ -106,11 +107,38 @@ Proof.
   erewrite IH; clear IH. 2: { exact Er. } erewrite new_name_det. { reflexivity. }
   intros k' v'. repeat rewrite Map.find_iff. repeat rewrite Map.find_overriding_union.
   destruct (Map.find_spec r1 k'). { apply Er in Y. apply Map.find_iff in Y. rewrite Y. reflexivity. }
-  destruct (Map.find_spec r2 k'). { apply Er in Y. apply N in Y as []. }
-  repeat rewrite <- Map.find_iff. fold (Map.domain a2). repeat rewrite Map.find_domain.
-  erewrite Map.in_eq. { reflexivity. } apply Map.eq_refl.
+  destruct (Map.find_spec r2 k'). { apply Er in Y. apply N in Y as []. } reflexivity.
 Qed.
 
 Lemma generate_det {r1 r2} (Er : Map.Eq r1 r2) {n1 n2} (En : Map.Eq n1 n2)
   : generate r1 n1 = generate r2 n2.
 Proof. apply generate_acc_det; try assumption. reflexivity. Qed.
+
+Lemma unfold_right {X Y} f (acc : Y) (hd : X) tl
+  : List.fold_right f acc (List.cons hd tl) = f hd (List.fold_right f acc tl).
+Proof. reflexivity. Qed.
+
+Lemma unfold_left {X Y} f (acc : Y) (hd : X) tl
+  : List.fold_left f (List.cons hd tl) acc = List.fold_left f tl (f acc hd).
+Proof. reflexivity. Qed.
+
+Theorem one_to_one_generate_acc {acc} (O2O : Map.OneToOne acc) reserved names
+  : Map.OneToOne (generate_acc acc reserved names).
+Proof.
+  unfold generate_acc. unfold Map.fold. rewrite MapCore.fold_spec. assert (ND := MapCore.bindings_spec2w names).
+  remember (MapCore.bindings names) as b eqn:Eb; clear names Eb; rename b into names.
+  generalize dependent reserved. generalize dependent acc.
+  induction ND as [| [head []] tail N ND IH]; intros. { simpl List.fold_left. exact O2O. }
+  rewrite unfold_left. simpl fst. apply IH; clear IH.
+  intro; intros. apply Map.find_overriding_add in F1 as [[-> ->] | [N1 F1]].
+  - apply Map.find_overriding_add in F2 as [[-> _] | [N2 F2]]. { reflexivity. }
+    eassert (IR : Map.InRange acc _). { eexists. exact F2. } apply Map.in_range in IR.
+    eapply or_intror in IR. apply Map.in_overriding_union in IR. apply not_in_new_name in IR as [].
+  - apply Map.find_overriding_add in F2 as [[-> ->] | [N2 F2]]. 2: { eapply O2O; eassumption. }
+    eassert (IR : Map.InRange acc _). { eexists. exact F1. } apply Map.in_range in IR.
+    eapply or_intror in IR. apply Map.in_overriding_union in IR. apply not_in_new_name in IR as [].
+Qed.
+
+Theorem one_to_one_generate reserved names
+  : Map.OneToOne (generate reserved names).
+Proof. apply one_to_one_generate_acc. apply Map.one_to_one_empty. Qed.

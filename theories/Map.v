@@ -73,7 +73,7 @@ Arguments for_all {T} p m : rename, simpl never.
 Lemma for_all_spec {T P p} (R : forall k (v : T), Reflect.Bool (P k v) (p k v)) m
   : Reflect.Bool (ForAll P m) (for_all p m).
 Proof.
-  cbn in *. unfold ForAll. unfold Find. rewrite MapCore.for_all_spec. eapply (@Reflect.bool_eq (forall k v
+  cbn in *. unfold Find. rewrite MapCore.for_all_spec. eapply (@Reflect.bool_eq (forall k v
     (F : SetoidList.InA MapCore.eq_key_elt (k, v) (MapCore.bindings m)), P k v)). {
     split; intros H k v; [rewrite MapCore.bindings_spec1 | rewrite <- MapCore.bindings_spec1]; apply H. }
   remember (MapCore.bindings m) as bindings eqn:Eb; clear m Eb.
@@ -82,6 +82,29 @@ Proof.
   destruct IH; constructor.
   - intros k' v' I. invert I. 2: { apply Y0. assumption. } invert H0; cbn in *; subst. exact Y.
   - intro C. apply N. intros k' v' I. apply C. right. exact I.
+Qed.
+
+
+
+Definition Any {T} (P : Name.name -> T -> Prop) (m : to T) : Prop :=
+  exists k v, Find m k v /\ P k v.
+Arguments Any {T} P m/.
+
+Definition any : forall T, (Name.name -> T -> bool) -> to T -> bool := @MapCore.exists_.
+Arguments any {T} p m : rename, simpl never.
+
+Lemma any_spec {T P p} (R : forall k (v : T), Reflect.Bool (P k v) (p k v)) m
+  : Reflect.Bool (Any P m) (any p m).
+Proof.
+  cbn in *. unfold Find. rewrite MapCore.exists_spec. eapply (@Reflect.bool_eq (exists k v,
+    SetoidList.InA MapCore.eq_key_elt (k, v) (MapCore.bindings m) /\ P k v)). {
+    split; (intros [k [v [M Pkv]]]; exists k; exists v; split; [| exact Pkv]); apply MapCore.bindings_spec1; exact M. }
+  remember (MapCore.bindings m) as bindings eqn:Eb; clear m Eb.
+  induction bindings as [| [k v] tail IH]; cbn in *. { constructor. intros [k [v [C Pkv]]]. invert C. }
+  destruct (R k v); cbn in *. { constructor. exists k. exists v. split. 2: { exact Y. } left. split; reflexivity. }
+  destruct IH; constructor. { destruct Y as [k' [v' [M Pkv]]]. exists k'. exists v'. split. 2: { exact Pkv. } right. exact M. }
+  intros [k' [v' [M Pkv]]]. invert M. { destruct H0; cbn in *; subst. apply N in Pkv as []. }
+  apply N0. exists k'. exists v'. split. { assumption. } exact Pkv.
 Qed.
 
 
@@ -480,16 +503,16 @@ Qed.
 
 Lemma remove_if_present_eq {T k1} {m1 m1' : to T} (R1 : RemoveIfPresent k1 m1 m1')
   {k2} (Ek : k1 = k2)
-  {m2} (Em : Map.Eq m1 m2)
-  {m2'} (Em' : Map.Eq m1' m2')
+  {m2} (Em : Eq m1 m2)
+  {m2'} (Em' : Eq m1' m2')
   : RemoveIfPresent k2 m2 m2'.
 Proof. subst. cbn in *. intros x y. rewrite <- Em'. rewrite R1. rewrite Em. reflexivity. Qed.
 
 Lemma remove_if_present_det {T k1} {m1 m1' : to T} (R1 : RemoveIfPresent k1 m1 m1')
   {k2} (Ek : k1 = k2)
-  {m2} (Em : Map.Eq m1 m2)
+  {m2} (Em : Eq m1 m2)
   {m2'} (R2 : RemoveIfPresent k2 m2 m2')
-  : Map.Eq m1' m2'.
+  : Eq m1' m2'.
 Proof. subst. cbn in *. intros x y. rewrite R1. rewrite R2. cbn in Em. rewrite Em. reflexivity. Qed.
 
 Lemma in_remove_if_present {T k} {m m' : to T} (R : RemoveIfPresent k m m') x
@@ -520,9 +543,9 @@ Proof. split. { exact I. } apply remove_if_present_remove. Qed.
 
 Lemma remove_det {T k1} {m1 m1' : to T} (R1 : Remove k1 m1 m1')
   {k2} (Ek : k1 = k2)
-  {m2} (Em : Map.Eq m1 m2)
+  {m2} (Em : Eq m1 m2)
   {m2'} (R2 : Remove k2 m2 m2')
-  : Map.Eq m1' m2'.
+  : Eq m1' m2'.
 Proof. eapply remove_if_present_det. { apply R1. } { exact Ek. } { exact Em. } apply R2. Qed.
 
 Lemma in_remove {T k} {m m' : to T} (R : Remove k m m') x
@@ -655,7 +678,7 @@ Definition Map {X Y} (f : Name.name -> X -> Y) m m' : Prop :=
 Arguments Map {X Y} f m m'/.
 *)
 
-Definition map : forall X Y, (Name.name -> X -> Y) -> Map.to X -> Map.to Y := @MapCore.mapi.
+Definition map : forall X Y, (Name.name -> X -> Y) -> to X -> to Y := @MapCore.mapi.
 Arguments map {X Y} f m : simpl never.
 
 
@@ -677,6 +700,10 @@ Proof.
   - invert I. { destruct H0; cbn in *; subst. left. split; reflexivity. }
     right. apply IH. eexists. exact H0.
 Qed.
+
+Lemma in_domain {T} k (m : to T)
+  : In (domain m) k <-> In m k.
+Proof. rewrite <- (find_domain k tt m). split; [intros [[] F] | intro F; exists tt]; exact F. Qed.
 
 
 
@@ -796,7 +823,7 @@ Proof.
 Qed.
 
 Lemma to_self_det {d1 y1} (TS1 : ToSelf d1 y1)
-  {d2} (Ed : Map.Eq d1 d2)
+  {d2} (Ed : Eq d1 d2)
   {y2} (TS2 : ToSelf d2 y2)
   : Eq y1 y2.
 Proof.
@@ -1110,3 +1137,190 @@ Proof.
   edestruct IH as [K [IHa IHb]]. 2: { exists K. split. { right. exact IHa. } exact IHb. }
   intro C. apply N. intros k' [-> | I] C'. { apply n in C' as []. } eapply C; eassumption.
 Qed.
+
+
+
+Definition OneToOne {T} (m : to T) : Prop :=
+  forall k1 v (F1 : Find m k1 v) k2 (F2 : Find m k2 v), k1 = k2.
+Arguments OneToOne {T} m/.
+
+Lemma one_to_one_empty {T}
+  : @OneToOne T empty.
+Proof. cbn. intros. invert F1. Qed.
+
+Lemma one_to_one_singleton {T} k v
+  : @OneToOne T (singleton k v).
+Proof. cbn. intros. apply find_singleton in F1 as [-> ->]. apply find_singleton in F2 as [-> _]. reflexivity. Qed.
+
+Lemma one_to_one_remove_if_present {T} {m : to T} (O2O : OneToOne m) {x m'} (R : RemoveIfPresent x m m')
+  : OneToOne m'.
+Proof. cbn. intros. apply R in F1 as [N1 F1]. apply R in F2 as [N2 F2]. eapply O2O; eassumption. Qed.
+
+Lemma one_to_one_to_self m
+  : OneToOne (to_self m).
+Proof. cbn. intros. apply to_self_to_self in F1 as [I1 ->]. apply to_self_to_self in F2 as [I2 ->]. reflexivity. Qed.
+
+Lemma one_to_one_overwrite {T x y m m'} (OW : @OverwriteIfPresent T x y m m')
+  : OneToOne m' <-> (
+    (forall k1 (N1 : k1 <> x) v (F1 : Find m k1 v) k2 (N2 : k2 <> x) (F2 : Find m k2 v), k1 = k2) /\
+    (forall z (F : Find m z y), z = x)).
+Proof.
+  split. 2: {
+    intros [O2O E]; cbn; intros. apply OW in F1 as [[-> ->] | [N1 F1]]; apply OW in F2 as [[-> E'] | [N2 F2]]; subst.
+    + reflexivity.
+    + symmetry. apply E. assumption.
+    + apply E. assumption.
+    + eapply O2O; eassumption. }
+  intro O2O. split; cbn; intros. { eapply O2O; apply OW; right; split; eassumption. }
+  eapply O2O; apply OW. 2: { left. split; reflexivity. }
+  destruct (Name.spec z x); [left | right]. { subst. split; reflexivity. } split; assumption.
+Qed.
+
+Lemma one_to_one_bulk_overwrite {T force original overwritten} (B : @BulkOverwrite T force original overwritten)
+  : OneToOne overwritten <-> (
+    OneToOne force /\
+    (forall k1 (N1 : forall (I : In force k1), False) v (F1 : Find original k1 v)
+      k2 (N2 : forall (I : In force k2), False) (F2 : Find original k2 v), k1 = k2) /\
+    (forall x y (Ff : Find force x y) z (N : forall (I : In force z), False) (Fo : Find original z y), z = x)).
+Proof.
+  split. 2: {
+    intros [O2Of [O2Oo E]]; cbn; intros. apply B in F1 as [F1 | [N1 F1]]; apply B in F2 as [F2 | [N2 F2]].
+    + eapply O2Of; eassumption.
+    + symmetry. eapply E; eassumption.
+    + eapply E; eassumption.
+    + eapply O2Oo; eassumption. }
+  intro O2O. split; [| split]; cbn; intros. { eapply O2O; apply B; left; eassumption. } {
+    eapply O2O; apply B; right; (split; [| eassumption]); intro I; [apply N1 | apply N2]; exact I. }
+  eapply O2O; apply B. 2: { left. exact Ff. } right. split; assumption.
+Qed.
+
+
+
+Definition Invert fwd bwd : Prop :=
+  forall k v, Find fwd k v <-> Find bwd v k.
+Arguments Invert fwd bwd/.
+
+Lemma invert_sym fwd bwd
+  : Invert fwd bwd <-> Invert bwd fwd.
+Proof. split; intros inv k v; cbn in inv; rewrite inv; reflexivity. Qed.
+
+(*Definition invert_acc := fold (fun k v => overriding_add v k).*)
+(*Arguments invert_acc/ acc fwd : rename.*)
+(**)
+(*Definition invert := invert_acc empty.*)
+(*Arguments invert/ fwd : rename.*)
+(**)
+(*Lemma invert_acc_not_overridden {k v} {acc : to Name.name} (F : Find acc v k) {tail}*)
+(*  (N : forall k' (I : SetoidList.InA MapCore.eq_key_elt (k', v) tail), False)*)
+(*  : Find (List.fold_left (fun acc kv => overriding_add (snd kv) (fst kv) acc) tail acc) v k.*)
+(*Proof.*)
+(*  generalize dependent acc. induction tail as [| [k' v'] tail IH]; intros; cbn in *. { exact F. }*)
+(*  apply IH. { intros k'' I. eapply N. right. exact I. }*)
+(*  apply find_overriding_add. right. split. 2: { exact F. } intros ->. eapply N. left. split; reflexivity.*)
+(*Qed.*)
+(**)
+(*Lemma invert_acc_invert {acc inv_acc} (acc_inv : Invert acc inv_acc)*)
+(*  {todo} (O2O : OneToOne todo) (D : Disjoint todo inv_acc) {fwd} (U : Union todo inv_acc fwd)*)
+(*  : Invert fwd (invert_acc acc todo).*)
+(*Proof.*)
+(*  intros k v. cbn in U. rewrite U. clear fwd U.*)
+(*  assert (ND := MapCore.bindings_spec2w todo). remember (MapCore.bindings todo) as b eqn:Eb.*)
+(*  remember (List.rev b) as r eqn:Er. eassert (E : invert_acc _ _ = List.fold_right _ _ r); [| rewrite E; clear E]. {*)
+(*    unfold invert_acc. unfold fold. rewrite MapCore.fold_spec. rewrite <- List.fold_left_rev_right.*)
+(*    f_equal. { reflexivity. } subst. reflexivity. }*)
+(*  assert (O2O' : forall k1 v' (F1 : SetoidList.InA MapCore.eq_key_elt (k1, v') r)*)
+(*    k2 (F2 : SetoidList.InA MapCore.eq_key_elt (k2, v') r), k1 = k2). { subst. intros.*)
+(*    eapply O2O; apply MapCore.bindings_spec1; apply SetoidList.InA_rev; eassumption. } clear O2O. rename O2O' into O2O.*)
+(*  assert (D' : forall k vt (F : SetoidList.InA MapCore.eq_key_elt (k, vt) r) va (I : Find acc va k), False). {*)
+(*    subst. intros. eapply D. 2: { eexists. apply acc_inv. exact I. }*)
+(*    eexists. apply MapCore.bindings_spec1. apply SetoidList.InA_rev. exact F. } clear D. rename D' into D.*)
+(*  cbn in acc_inv. rewrite <- acc_inv. clear inv_acc acc_inv. unfold Find at 1. rewrite <- MapCore.bindings_spec1.*)
+(*  rewrite <- Eb. rewrite <- SetoidList.InA_rev. rewrite <- Er. apply SetoidList.NoDupA_rev in ND. 2: {*)
+(*    split. { intros []. reflexivity. } { intros [] [] E. symmetry. exact E. }*)
+(*    intros [] [] [] E1 E2; unfold MapCore.eq_key in *; cbn in *; subst; reflexivity. }*)
+(*  rewrite <- Er in ND. clear b todo Eb Er. rename r into todo. generalize dependent acc. generalize dependent O2O.*)
+(*  generalize dependent v. generalize dependent k. induction ND as [| [k v] tail N ND IH]; intros; cbn in *. {*)
+(*    split. { intros [I | F]. { invert I. } exact F. } intro F. right. exact F. }*)
+(*  split.*)
+(*  - intro opt. apply find_overriding_add. destruct opt as [I | F].*)
+(*    + invert I. { destruct H0; cbn in *; subst. left. split; reflexivity. } right. split.*)
+(*      * intros ->. assert (k0 = k). { eapply O2O. { right. eassumption. } left. split; reflexivity. }*)
+(*        subst. apply N. apply eq_key_elt. eexists. eassumption.*)
+(*      * apply IH. { intros. eapply O2O; right; eassumption. } 2: { left. assumption. }*)
+(*        intros. eapply D in I as []. right. exact F.*)
+(*    + destruct (Name.spec v0 v). { subst. left. split. { reflexivity. }*)
+(*        destruct (Name.spec k0 k). { exact Y. }*)
+(*      eapply O2O. 2: { left. split; reflexivity. }*)
+
+
+
+Definition InDomainOrRange (x : Name.name) (m : to Name.name) : Prop :=
+  In m x \/ InRange m x.
+Arguments InDomainOrRange x m/.
+
+Definition in_domain_or_range (x : Name.name) : to Name.name -> bool :=
+  any (fun k v => orb (Name.eqb x k) (Name.eqb x v)).
+Arguments in_domain_or_range x m/.
+
+Lemma in_domain_or_range_spec x m
+  : Reflect.Bool (InDomainOrRange x m) (in_domain_or_range x m).
+Proof.
+  eapply (@Reflect.bool_eq (Any (fun k v => x = k \/ x = v) m)); [| eapply any_spec]. 2: {
+    intros. destruct (Name.spec x k); cbn. { constructor. left. exact Y. }
+    destruct (Name.spec x v); constructor. { right. exact Y. }
+    intros [-> | ->]. { apply N. reflexivity. } apply N0. reflexivity. } split.
+  - intros [[y F] | [z F]]. 2: { do 2 eexists. split. { exact F. } right. reflexivity. }
+    do 2 eexists. split. { exact F. } left. reflexivity.
+  - intros [k [v [F [-> | ->]]]]; [left | right]. { eexists. exact F. } eexists. exact F.
+Qed.
+
+Lemma in_domain_or_range_dec x m
+  : {InDomainOrRange x m} + {~InDomainOrRange x m}.
+Proof.
+  destruct (in_domain_or_range x m) eqn:E; [left | right].
+  - eapply Reflect.bool_iff. { apply in_domain_or_range_spec. } exact E.
+  - intro I. eapply Reflect.bool_iff in I. 2: { apply in_domain_or_range_spec. }
+    rewrite I in E. discriminate E.
+Defined.
+
+
+
+Definition range_acc : set -> to Name.name -> set := fold (fun k v acc => overriding_add v tt acc).
+Arguments range_acc acc m/.
+
+Definition range : to Name.name -> set := range_acc empty.
+Arguments range m/.
+
+Lemma find_range_acc acc m k v
+  : Find (range_acc acc m) k v <-> (In acc k \/ InRange m k).
+Proof.
+  destruct v. assert (Iff : InRange m k <-> exists j, SetoidList.InA MapCore.eq_key_elt (j, k) (List.rev (MapCore.bindings m))). {
+    split; intros [v' F]; exists v'; [apply SetoidList.InA_rev |
+      apply -> SetoidList.InA_rev in F]; apply MapCore.bindings_spec1; exact F. }
+  rewrite Iff; clear Iff. unfold range. unfold range_acc. unfold fold. rewrite MapCore.fold_spec.
+  rewrite <- List.fold_left_rev_right. assert (ND := MapCore.bindings_spec2w m). apply SetoidList.NoDupA_rev in ND. 2: {
+    split. { intros []. reflexivity. } { intros [] []. symmetry. assumption. }
+    intros [] [] [] E1 E2. unfold MapCore.eq_key in *. cbn in *. subst. reflexivity. }
+  remember (List.rev (MapCore.bindings m)) as b eqn:Eb; clear m Eb.
+  generalize dependent acc. induction ND as [| [k' v'] tail N ND IH]; intros; cbn in *; [| split].
+  - split. { intro F. left. exists tt. exact F. } intros [[[] F] | [j I]]. { exact F. } invert I.
+  - intro F. apply find_overriding_add in F as [[-> _] | [N' F]]. { right. exists k'. left. split; reflexivity. }
+    apply IH in F as [[[] F] | [j I]]; [left | right]. { exists tt. exact F. } exists j. right. exact I.
+  - intro opt. apply find_overriding_add. destruct opt as [[[] F] | [j I]].
+    + destruct (Name.spec k v'); [left | right]. { subst. split; reflexivity. }
+      split. { assumption. } apply IH. left. exists tt. exact F.
+    + invert I. { left. destruct H0; cbn in *; subst. split; reflexivity. }
+      destruct (Name.spec k v'); [left | right]. { subst. split; reflexivity. }
+      split. { assumption. } apply IH. right. exists j. assumption.
+Qed.
+
+Lemma find_range m k v
+  : Find (range m) k v <-> InRange m k.
+Proof.
+  unfold range. rewrite find_range_acc. split. { intros [I | I]. { apply empty_empty in I as []. } exact I. }
+  intro I. right. exact I.
+Qed.
+
+Lemma in_range m k
+  : In (range m) k <-> InRange m k.
+Proof. rewrite <- (find_range m k tt). split; [intros [[] F] | intro F; exists tt]; exact F. Qed.

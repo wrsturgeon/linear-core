@@ -58,20 +58,16 @@ Inductive Step (context : Context.context) : Term.term -> Context.context -> Ter
   | ApR
       pattern scrutinee (not_yet_safe_to_match
         : ~Match.Compatible context pattern \/ exists x, UsedIn.Term scrutinee x /\ BoundIn.Pattern pattern x)
-      body_if_match other_cases other_used (all_other_used_names
+      body_if_match other_cases other_used (scan_other_used
         (* Note that this removes already bound terms, since `UsedIn` won't shadow: *)
         : Map.Reflect (UsedIn.Term (Term.App (Term.Cas pattern body_if_match other_cases) scrutinee)) other_used)
+      to_self_other (other_idem : Map.ToSelf other_used to_self_other)
       reserved (union_into_reserved : Map.Union (Map.domain context) other_used reserved)
       new_names (generate_new_names : NewNames.generate reserved (BoundIn.pattern pattern) = new_names)
-      renamed_pattern (rename_pattern : Rename.Pattern new_names pattern renamed_pattern)
-      map_body_if_match (overwrite_body_if_match
-        : Map.BulkOverwrite new_names (Map.to_self (UsedIn.term body_if_match)) map_body_if_match)
-      renamed_body_if_match (rename_body_if_match
-        : Rename.Term map_body_if_match body_if_match renamed_body_if_match)
-      map_other_cases (overwrite_other_cases
-        : Map.BulkOverwrite new_names (Map.to_self (UsedIn.term other_cases)) map_other_cases)
-      renamed_other_cases (rename_other_cases
-        : Rename.Term map_other_cases other_cases renamed_other_cases)
+      name_map (merge_names : Map.BulkOverwrite new_names to_self_other name_map) (O2O : Map.OneToOne name_map)
+      renamed_pattern (rename_pattern : Rename.Pattern O2O pattern renamed_pattern)
+      renamed_body_if_match (rename_body_if_match : Rename.Term O2O body_if_match renamed_body_if_match)
+      renamed_other_cases (rename_other_cases : Rename.Term O2O other_cases renamed_other_cases)
       unchanged_context (context_unchanged : Map.Eq context unchanged_context)
       : Step context
         (Term.App (Term.Cas pattern body_if_match other_cases) scrutinee) unchanged_context
@@ -146,21 +142,17 @@ Proof.
       * destruct N as [x [U B]]. edestruct safe_names. { exact U. } exact B.
     + split. { eapply Map.eq_trans. { apply Map.eq_sym. exact context_unchanged. }
         eapply Map.eq_trans. { exact Ec. } exact context_unchanged0. }
-      f_equal. assert (Eng : Map.Eq (NewNames.generate reserved (BoundIn.pattern pattern))
-        (NewNames.generate reserved0 (BoundIn.pattern pattern))). {
-        erewrite NewNames.generate_det. { apply Map.eq_refl. } 2: { apply Map.eq_refl. }
-        eapply Map.union_det; try eassumption.
-        * split; intro F; apply Map.find_domain; apply Map.find_domain in F;
-          eapply Map.in_eq; try exact F. { apply Map.eq_sym. exact Ec. } exact Ec.
-        * split; intro F; (eassert (I : Map.In _ _); [eexists; exact F |]);
-          [apply all_other_used_names in I | apply all_other_used_names0 in I];
-          [apply all_other_used_names0 in I | apply all_other_used_names in I];
-          destruct I as [[] I]; destruct v; exact I. }
-      f_equal. { eapply Rename.pattern_det; try reflexivity; eassumption. }
-      * eapply Rename.term_det; try reflexivity; try eassumption.
-        eapply Map.bulk_overwrite_det; try eassumption. apply Map.eq_refl.
-      * eapply Rename.term_det; try reflexivity; try eassumption.
-        eapply Map.bulk_overwrite_det; try eassumption. apply Map.eq_refl.
+      eassert (eq_name_map : Map.Eq name_map name_map0). 2: { f_equal. f_equal;
+        [eapply Rename.pattern_det | eapply Rename.term_det | eapply Rename.term_det];
+        try reflexivity; try eassumption; exact eq_name_map. }
+      eassert (eq_other : Map.Eq other_used other_used0). {
+        intros k []. split; intro F; (eassert (I : Map.In _ _); [eexists; exact F |]);
+        [apply scan_other_used in I | apply scan_other_used0 in I];
+        [apply scan_other_used0 in I | apply scan_other_used in I];
+        destruct I as [[] F']; exact F'. }
+      eapply Map.bulk_overwrite_det; try eassumption. 2: { eapply Map.to_self_det; eassumption. }
+      erewrite NewNames.generate_det; try apply Map.eq_refl. eapply Map.union_det; try eassumption.
+      intros k []. repeat rewrite Map.find_domain. apply Map.in_eq. exact Ec.
 Qed.
 
 
@@ -173,7 +165,7 @@ Lemma eq
   {t2'} (Et' : t1' = t2')
   : Step c2 t2 c2' t2'.
 Proof.
-  subst. rename t2 into t. rename t2' into t'. generalize dependent c2'. generalize dependent c2.
+  subst. rename t2 into t. rename t2' into t'. generalize dependent c2'. generalize dependent c2. {
   induction S1; cbn in *; intros.
   - constructor. { apply Ec. exact lookup. } destruct no_contraction as [I R]. split.
     + eapply Map.in_eq. { apply Map.eq_sym. exact Ec. } eexists. exact lookup.
@@ -209,29 +201,30 @@ Proof.
       * intro C. apply N. eapply Match.compatible_eq. { exact C. } 2: { reflexivity. }
         apply Map.eq_sym. exact Ec.
       * exists x. split. { exact U. } exact B.
-    + exact all_other_used_names.
+    + exact scan_other_used.
+    + eassumption.
     + intros x y. rewrite union_into_reserved. fold (Map.domain context). repeat rewrite Map.find_domain.
       erewrite Map.in_eq. { reflexivity. } exact Ec.
     + eassumption.
-    + eapply Rename.pattern_eq; try reflexivity; try eassumption. apply Map.eq_refl.
     + eassumption.
     + eassumption.
     + eassumption.
     + eassumption.
     + eapply Map.eq_trans. { apply Map.eq_sym. exact Ec. }
-      eapply Map.eq_trans. { exact context_unchanged. } exact Ec'.
+      eapply Map.eq_trans. { exact context_unchanged. } exact Ec'. }
 Qed.
 
 
 
 Theorem name_invariant {context term updated_context updated_term}
   (original_stepped : Step context term updated_context updated_term)
-  {name_mappings renamed_term} (rename_term : Rename.Term name_mappings term renamed_term)
-  {renamed_context} (rename_context : Rename.Context name_mappings context renamed_context)
+  {name_mappings} (O2O : Map.OneToOne name_mappings)
+  {renamed_term} (rename_term : Rename.Term O2O term renamed_term)
+  {renamed_context} (rename_context : Rename.Context O2O context renamed_context)
   : exists updated_renamed_context updated_renamed_term,
     Step renamed_context renamed_term updated_renamed_context updated_renamed_term /\
-    exists updated_name_mappings,
-      Rename.Term updated_name_mappings updated_term updated_renamed_term /\
-      Rename.Context updated_name_mappings updated_context updated_renamed_context.
+    exists updated_name_mappings (O2OU : Map.OneToOne updated_name_mappings),
+      Rename.Term O2OU updated_term updated_renamed_term /\
+      Rename.Context O2OU updated_context updated_renamed_context.
 Proof.
 Abort.

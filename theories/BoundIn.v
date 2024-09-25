@@ -82,10 +82,6 @@ Qed.
 
 (* Bound *anywhere* in a term: not only at the top-level (e.g. in a match) but also arbitrarily far from control flow. *)
 Inductive Term : Term.term -> Name.name -> Prop :=
-  | TMov name
-      : Term (Term.Mov name) name
-  | TRef name
-      : Term (Term.Ref name) name
   | TApF function name (bound_in_function : Term function name) argument
       : Term (Term.App function argument) name
   | TApA argument name (bound_in_argument : Term argument name) function
@@ -107,8 +103,6 @@ Arguments Term term name.
 
 Fixpoint term t : Map.set :=
   match t with
-  | Term.Mov name
-  | Term.Ref name => Map.singleton name tt
   | Term.App function arg => Map.set_union (term function) (term arg)
   | Term.For variable type body => Map.overriding_add variable tt (Map.set_union (term type) (term body))
   | Term.Cas p body_if_match other_cases => Map.set_union (pattern p) (Map.set_union (term body_if_match) (term other_cases))
@@ -117,21 +111,14 @@ Fixpoint term t : Map.set :=
 
 Lemma term_spec : Reflect Term term. Proof.
   split.
-  - intro I. generalize dependent x. induction t; intros; simpl term in *.
-    + apply Map.empty_empty in I as [].
-    + apply Map.empty_empty in I as [].
-    + apply Map.empty_empty in I as [].
-    + apply Map.empty_empty in I as [].
-    + apply Map.in_singleton in I as ->. constructor.
-    + apply Map.in_singleton in I as ->. constructor.
+  - intro I. generalize dependent x. induction t; intros;
+    simpl term in *; try solve [apply Map.empty_empty in I as []].
     + apply Map.in_overriding_union in I as [I | I]; [apply TApF | apply TApA]; [apply IHt1 | apply IHt2]; exact I.
     + apply Map.in_overriding_add in I as [-> | I]. { apply TFoV. }
       apply Map.in_overriding_union in I as [I | I]; [apply TFoT | apply TFoB]; [apply IHt1 | apply IHt2]; exact I.
     + apply Map.in_overriding_union in I as [I | I]. { apply TCaP. apply pattern_spec. exact I. }
       apply Map.in_overriding_union in I as [I | I]; [apply TCaB | apply TCaO]; [apply IHt1 | apply IHt2]; exact I.
   - intro T. induction T; simpl term in *.
-    + apply Map.in_singleton. reflexivity.
-    + apply Map.in_singleton. reflexivity.
     + apply Map.in_overriding_union. left. exact IHT.
     + apply Map.in_overriding_union. right. exact IHT.
     + apply Map.in_overriding_add. left. reflexivity.
