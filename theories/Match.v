@@ -115,11 +115,12 @@ Proof.
       intros x I B. eapply H. { exact I. } constructor. exact B. }
     assert (N' : ~Map.In context_with_matches argument). { intro I.
       eapply in_strict in I as [I | I]; [| | exact IH]. { apply N in I as []. } apply H in I as []. constructor. }
-    eexists (Term.App _ Term.Err). eexists. econstructor. { exact IH. } { exact N'. }
+    eexists. eexists. econstructor. { exact IH. } { exact N'. }
     apply Map.add_overriding. intros v' F. eassert (I : Map.In _ _). { eexists. exact F. } apply N' in I as [].
   - intros [scrutinee [context_with_matches S]] k I B. generalize dependent k. generalize dependent WF.
     induction S; intros. { invert B. } invert B. { apply N. eapply in_strict. { exact S. } right. exact I. }
     invert WF. eapply IHS. { exact curried_well_formed. } { exact I. } exact bound_earlier.
+  Unshelve. repeat constructor.
 Qed.
 
 Lemma compatible_strict_eq {c1 p1} (C : CompatibleStrict c1 p1) {c2} (Ec : Map.Eq c1 c2) {p2} (Ep : p1 = p2)
@@ -251,11 +252,12 @@ Proof.
       intros x I B. eapply H. { exact I. } constructor. exact B. }
     assert (N' : ~Map.In context_with_matches argument). { intro I.
       eapply in_strict_ref in I as [I | I]; [| | exact IH]. { apply N in I as []. } apply H in I as []. constructor. }
-    eexists (Term.App _ Term.Err). do 2 eexists. econstructor. { exact IH. } { exact N'. }
+    eexists. do 2 eexists. econstructor. { exact IH. } { exact N'. }
     apply Map.add_overriding. intros v' F. eassert (I : Map.In _ _). { eexists. exact F. } apply N' in I as [].
   - intros [scrutinee [cleaved [context_with_matches S]]] k I B. generalize dependent k. generalize dependent WF.
     induction S; intros. { invert B. } invert B. { apply N. eapply in_strict_ref. { exact S. } right. exact I. }
     invert WF. eapply IHS. { exact curried_well_formed. } { exact I. } exact bound_earlier.
+  Unshelve. repeat constructor.
 Qed.
 
 

@@ -283,12 +283,6 @@ Qed.
 
 
 Inductive Term {lookup : Map.to Name.name} (O2O : Map.OneToOne lookup) : Term.term -> Term.term -> Prop :=
-  | Err
-      : Term O2O Term.Err Term.Err
-  | Typ
-      : Term O2O Term.Typ Term.Typ
-  | Prp
-      : Term O2O Term.Prp Term.Prp
   | Ctr ctor
       : Term O2O (Term.Ctr ctor) (Term.Ctr ctor) (* constructor names live in a different universe *)
   | Mov x y (F : Map.Find lookup x y)

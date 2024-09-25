@@ -7,15 +7,25 @@ From LinearCore Require Import
   .
 
 Variant builtin : Set :=
+  | Error
+  | LargeType
+  | Proposition
   | Reference
   .
 
-Definition builtin_eq (a b : builtin) := true.
+Definition builtin_eq (a b : builtin) :=
+  match a, b with
+  | Error, Error
+  | LargeType, LargeType
+  | Proposition, Proposition
+  | Reference, Reference => true
+  | _, _ => false
+  end.
 Arguments builtin_eq a b/.
 
 Lemma builtin_eq_spec a b
   : Reflect.Bool (a = b) (builtin_eq a b).
-Proof. destruct a; destruct b; constructor; try reflexivity. Qed.
+Proof. destruct a; destruct b; constructor; try solve [intro D; discriminate D]; reflexivity. Qed.
 
 
 
@@ -35,8 +45,9 @@ Arguments eq a b/.
 Lemma eq_spec a b
   : Reflect.Bool (a = b) (eq a b).
 Proof.
-  destruct a as [a | a]; destruct b as [b | b]; try (constructor; intro D; discriminate D); cbn.
-  - constructor. destruct a. destruct b. reflexivity.
+  destruct a as [a | a]; destruct b as [b | b]; try (constructor; intro D; discriminate D); unfold eq.
+  - destruct (builtin_eq_spec a b); constructor. { subst. reflexivity. }
+    intro D. apply N. invert D. reflexivity.
   - destruct (Name.spec a b); subst; constructor. { reflexivity. } intro E. apply N. invert E. reflexivity.
 Qed.
 
@@ -46,6 +57,9 @@ From Coq Require Import String.
 
 Definition builtin_to_string builtin : string :=
   match builtin with
+  | Error => "!"
+  | LargeType => "*"
+  | Proposition => "?"
   | Reference => "&"
   end.
 

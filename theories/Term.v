@@ -11,9 +11,6 @@ From LinearCore Require Import
 
 (* TODO: make `Err`, `Typ`, & `Prp` constructors? *)
 Inductive term : Set :=
-  | Err
-  | Typ
-  | Prp
   | Ctr (constructor : Constructor.constructor)
   | Mov (name : Name.name)
   | Ref (name : Name.name)
@@ -24,9 +21,6 @@ Inductive term : Set :=
 
 Fixpoint eq a b :=
   match a, b with
-  | Err, Err
-  | Typ, Typ
-  | Prp, Prp => true
   | Ctr a, Ctr b => Constructor.eq a b
   | Mov a, Mov b
   | Ref a, Ref b => Name.eqb a b
@@ -63,9 +57,6 @@ From Coq Require Import String.
 
 Fixpoint to_string t : string :=
   match t with
-  | Err => "!"
-  | Typ => "*"
-  | Prp => "?"
   | Ctr ctor => Constructor.to_string ctor
   | Mov name => Name.to_string name
   | Ref name => "&" ++ Name.to_string name

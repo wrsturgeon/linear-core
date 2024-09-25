@@ -180,7 +180,7 @@ Proof.
     cbn. econstructor. { exact Y. } { apply Map.remove_remove. eexists. exact Y. } { exact Y0. }
     + intros [y F]. apply N in F as [].
     + apply Map.add_overriding. intros v F. apply N in F as [].
-  - unfold step. destruct term1 as [| | | | | | | | pattern body_if_match other_cases];
+  - unfold step. destruct term1 as [| | | | | pattern body_if_match other_cases];
     try solve [constructor; intros [m t] C; invert C]. destruct andb eqn:E.
     + admit.
     + edestruct (@Rename.pattern_spec

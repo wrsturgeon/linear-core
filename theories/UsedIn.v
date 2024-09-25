@@ -47,9 +47,6 @@ Lemma term_spec t
 Proof.
   induction t; cbn in *; intros.
   - split. { intros [v F]. invert F. } intro T. invert T.
-  - split. { intros [v F]. invert F. } intro T. invert T.
-  - split. { intros [v F]. invert F. } intro T. invert T.
-  - split. { intros [v F]. invert F. } intro T. invert T.
   - split. { intros [v F]. apply Map.find_singleton in F as [-> ->]. constructor. }
     intro T. invert T. eexists. apply Map.find_singleton. split; reflexivity.
   - split. { intros [v F]. apply Map.find_singleton in F as [-> ->]. constructor. }

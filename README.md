@@ -7,9 +7,6 @@ At a glance, here's the abstract syntax tree, defined similarly to Backus-Naur f
 Terms and types:
 ```ebnf
 <term> ::=
-  | Error
-  | Type
-  | Proposition
   | Constructor <constructor>
   | Move <name>
   | Reference <name>
@@ -58,18 +55,13 @@ All terms are one of the following:
 - **Application** of one term to another.
 - A dependent **function type**, written `forall` in general or `->` in non-dependent settings.
 - **Case** analysis: a pattern, a term if the pattern matches, and another term if it doesn't.
-- The type of **propositions**.
-- The **type of types**. (Type-in-type: not recommended for theorem provers.)
 
-Most of this is standard, but two notable characteristics differ from standard programming languages:
-- Match statements do not come packaged with their scrutinee.
-  In most languages, you'll see `match x with ...` or `match x { ...`.
-  The interal AST doesn't follow that representation:
-  instead, match statements are represented as an application of a standalone match statement to separate scrutinee.
-  That is, with a syntax as close to the AST as possible, these statements might look like `(match ...) x`.
-- The last kind of AST node, called `Err`, instructs the type system to check that a region cannot be reached.
-  For example, many languages support exhaustive match statements. These statements can desugar to nested case analyses
-  whose final alternate term is `Err`, and the type system will check that at least one pattern will match.
+Most of this is standard, but the main difference from standard languages is that
+_match statements do not come packaged with their scrutinee_.
+In most languages, you'll see `match x with ...` or `match x { ...`.
+The interal AST doesn't follow that representation:
+instead, match statements are represented as an application of a standalone match statement to separate scrutinee.
+That is, with a syntax as close to the AST as possible, these statements might look like `(match ...) x`.
 
 
 
