@@ -39,3 +39,18 @@ Proof.
   - constructor. destruct a. destruct b. reflexivity.
   - destruct (Name.spec a b); subst; constructor. { reflexivity. } intro E. apply N. invert E. reflexivity.
 Qed.
+
+
+
+From Coq Require Import String.
+
+Definition builtin_to_string builtin : string :=
+  match builtin with
+  | Reference => "&"
+  end.
+
+Definition to_string ctor : string :=
+  match ctor with
+  | Builtin builtin => builtin_to_string builtin
+  | UserDefined name => "<" ++ Name.to_string name ++ ">"
+  end.

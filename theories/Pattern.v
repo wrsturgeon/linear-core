@@ -80,3 +80,25 @@ Proof.
   - unfold eq. destruct (move_or_reference_eq_spec move_or_reference0 move_or_reference1); constructor. { subst. reflexivity. }
     intro E. apply N. invert E. reflexivity.
 Qed.
+
+
+
+From Coq Require Import String.
+
+Fixpoint strict_to_string p : string :=
+  match p with
+  | Ctr ctor => Constructor.to_string ctor
+  | App function argument => strict_to_string function ++ Name.to_string argument
+  end.
+
+Definition move_or_reference_to_string p : string :=
+  match p with
+  | Mov p => strict_to_string p
+  | Ref p => "&" ++ strict_to_string p
+  end.
+
+Definition to_string p : string :=
+  match p with
+  | Nam name => Name.to_string name
+  | Pat p => move_or_reference_to_string p
+  end.

@@ -9,6 +9,7 @@ From LinearCore Require Import
 
 
 
+(* TODO: make `Err`, `Typ`, & `Prp` constructors? *)
 Inductive term : Set :=
   | Err
   | Typ
@@ -55,3 +56,20 @@ Proof.
     destruct (IHa1 b1); cbn. 2: { constructor. intro E. apply N. invert E. reflexivity. }
     subst. destruct (IHa2 b2); constructor. { f_equal. assumption. } intro E. apply N. invert E. reflexivity.
 Qed.
+
+
+
+From Coq Require Import String.
+
+Fixpoint to_string t : string :=
+  match t with
+  | Err => "!"
+  | Typ => "*"
+  | Prp => "?"
+  | Ctr ctor => Constructor.to_string ctor
+  | Mov name => Name.to_string name
+  | Ref name => "&" ++ Name.to_string name
+  | App function argument => "(" ++ to_string function ++ ") (" ++ to_string argument ++ ")"
+  | For variable type body => "forall (" ++ Name.to_string variable ++ ": " ++ to_string type ++ "), " ++ to_string body
+  | Cas pattern body_if_match other_cases => "if match " ++ Pattern.to_string pattern ++ " then { " ++ to_string body_if_match ++ " } else " ++ to_string other_cases
+  end.

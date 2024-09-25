@@ -1,16 +1,27 @@
 From LinearCore Require
+  DebugPrint
   Fuel
   Halt
   SmallStep
   Term
   .
 From LinearCore Require Import
+  DollarSign
   Invert
   .
 
 
 
+From Coq Require Import String.
+Definition to_string (h : Halt.halt (Context.context * Term.term)) : string :=
+  match h with
+  | Halt.Return (ctx, t) => Term.to_string t ++ " with " ++ Context.to_string ctx
+  | Halt.Exit => "<abort>"
+  | Halt.OutOfFuel => "<out of time>"
+  end.
+
 Fixpoint step (fuel : Fuel.fuel) (context : Context.context) (term : Term.term) : Halt.halt (Context.context * Term.term) :=
+  DebugPrint.format to_string $
   match fuel with Fuel.Stop => Halt.OutOfFuel | Fuel.Continue fuel =>
     match term with
     | Term.Mov name =>
