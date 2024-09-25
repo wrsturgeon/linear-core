@@ -18,7 +18,9 @@ Arguments OutOfFuel {T}.
 
 
 
-Extract Inductive halt => "option" [ "Some" "None" "(assert false; None)" ]
+(*Extract Inductive halt => "option" [ "Some" "None" "(assert false; None)" ]*)
+(*  "(fun some none _ opt -> match opt with None -> none () | Some x -> some x)".*)
+Extract Inductive halt => "option" [ "Some" "None" "()" ]
   "(fun some none _ opt -> match opt with None -> none () | Some x -> some x)".
 
 
