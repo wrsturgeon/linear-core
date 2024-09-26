@@ -10,13 +10,13 @@ From LinearCore Require Import
 
 
 
-Definition Reflect {T} (P : T -> Name.name -> Prop) (p : T -> Map.set) : Prop :=
+Definition Reflect {T} (P : T -> String.string -> Prop) (p : T -> Map.set) : Prop :=
   forall t, Map.Reflect (P t) (p t).
 Arguments Reflect {T} P p/.
 
 
 
-Inductive Strict : Pattern.strict -> Name.name -> Prop :=
+Inductive Strict : Pattern.strict -> String.string -> Prop :=
   | SArg curried name
       : Strict (Pattern.App curried name) name
   | SRec curried name (bound_earlier : Strict curried name) argument
@@ -38,7 +38,7 @@ Qed.
 
 
 
-Variant MoveOrReference : forall (pattern : Pattern.move_or_reference) (name : Name.name), Prop :=
+Variant MoveOrReference : forall (pattern : Pattern.move_or_reference) (name : String.string), Prop :=
   | MMov strict name (bound_in_strict : Strict strict name)
       : MoveOrReference (Pattern.Mov strict) name
   | MRef strict name (bound_in_strict : Strict strict name)
@@ -55,7 +55,7 @@ Qed.
 
 
 
-Variant Pattern : forall (pattern : Pattern.pattern) (name : Name.name), Prop :=
+Variant Pattern : forall (pattern : Pattern.pattern) (name : String.string), Prop :=
   | PNam name
       : Pattern (Pattern.Nam name) name
   | PPat move_or_reference name (bound_in_move_or_reference : MoveOrReference move_or_reference name)
@@ -81,7 +81,7 @@ Qed.
 
 
 (* Bound *anywhere* in a term: not only at the top-level (e.g. in a match) but also arbitrarily far from control flow. *)
-Inductive Term : Term.term -> Name.name -> Prop :=
+Inductive Term : Term.term -> String.string -> Prop :=
   | TApF function name (bound_in_function : Term function name) argument
       : Term (Term.App function argument) name
   | TApA argument name (bound_in_argument : Term argument name) function

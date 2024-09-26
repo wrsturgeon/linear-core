@@ -1,6 +1,5 @@
 From LinearCore Require
   Constructor
-  Name
   .
 From LinearCore Require Import
   Invert
@@ -10,13 +9,13 @@ From LinearCore Require Import
 
 Inductive strict : Set :=
   | Ctr (constructor : Constructor.constructor)
-  | App (curried : strict) (argument : Name.name)
+  | App (curried : strict) (argument : String.string)
   .
 
 Fixpoint strict_eq a b :=
   match a, b with
   | Ctr a, Ctr b => Constructor.eq a b
-  | App ca aa, App cb ab => andb (strict_eq ca cb) (Name.eqb aa ab)
+  | App ca aa, App cb ab => andb (strict_eq ca cb) (String.eqb aa ab)
   | _, _ => false
   end.
 
@@ -29,7 +28,7 @@ Proof.
   - constructor. intro D. discriminate D.
   - constructor. intro D. discriminate D.
   - simpl strict_eq. destruct (IHa b). 2: { constructor. intro E. apply N. invert E. reflexivity. }
-    destruct (Name.spec argument argument0); constructor. { subst. reflexivity. } intro E. apply N. invert E. reflexivity.
+    destruct (String.eqb_spec argument argument0); constructor. { subst. reflexivity. } intro E. apply n. invert E. reflexivity.
 Qed.
 
 
@@ -59,13 +58,13 @@ Qed.
 
 
 Variant pattern : Set :=
-  | Nam (name : Name.name)
+  | Nam (name : String.string)
   | Pat (move_or_reference : move_or_reference)
   .
 
 Definition eq a b :=
   match a, b with
-  | Nam a, Nam b => Name.eqb a b
+  | Nam a, Nam b => String.eqb a b
   | Pat a, Pat b => move_or_reference_eq a b
   | _, _ => false
   end.
@@ -74,7 +73,7 @@ Lemma eq_spec a b
   : Reflect.Bool (a = b) (eq a b).
 Proof.
   destruct a; destruct b; cbn.
-  - destruct (Name.spec name name0); constructor. { subst. reflexivity. } intro E. apply N. invert E. reflexivity.
+  - destruct (String.eqb_spec name name0); constructor. { subst. reflexivity. } intro E. apply n. invert E. reflexivity.
   - constructor. intro D. discriminate D.
   - constructor. intro D. discriminate D.
   - unfold eq. destruct (move_or_reference_eq_spec move_or_reference0 move_or_reference1); constructor. { subst. reflexivity. }
@@ -88,7 +87,7 @@ From Coq Require Import String.
 Fixpoint strict_to_string p : string :=
   match p with
   | Ctr ctor => Constructor.to_string ctor
-  | App function argument => strict_to_string function ++ Name.to_string argument
+  | App function argument => strict_to_string function ++ argument
   end.
 
 Definition move_or_reference_to_string p : string :=
@@ -99,6 +98,6 @@ Definition move_or_reference_to_string p : string :=
 
 Definition to_string p : string :=
   match p with
-  | Nam name => Name.to_string name
+  | Nam name => name
   | Pat p => move_or_reference_to_string p
   end.

@@ -1,6 +1,5 @@
 From LinearCore Require
   Map
-  Name
   .
 From LinearCore Require Import
   Invert
@@ -8,23 +7,17 @@ From LinearCore Require Import
 
 
 
-Import Ascii.
-Definition underscore := "_"%char.
-
-Definition underscored name :=
-  match name with
-  | Name.Name head tail => Name.Name underscore (String.String head tail)
-  end.
-
-
-
 Definition in_ := @Map.in_.
 Arguments in_/ {T} m k.
 
-Axiom new_name : Map.set -> Name.name -> Name.name.
+Import String.
+Definition prime : String.string := "'".
+Arguments prime/.
+
+Axiom new_name : Map.set -> String.string -> String.string.
 Arguments new_name reserved orig_name.
 Extract Constant new_name =>
-  "fun reserved -> let rec new_name' name = if in_ reserved name then new_name' (underscored name) else name in new_name'".
+  "fun reserved -> let rec new_name' name = if in_ reserved name then new_name' (name ^ prime) else name in new_name'".
 
 Axiom not_in_new_name : forall reserved orig_name (I : Map.In reserved (new_name reserved orig_name)), False.
 Arguments not_in_new_name {reserved orig_name} I.
@@ -36,11 +29,11 @@ Arguments new_name_det {r1 r2} E orig_name.
 
 
 (* TODO: speed up by accumulating results of `range` call *)
-Definition generate_acc acc reserved : Map.set -> Map.to Name.name :=
+Definition generate_acc acc reserved : Map.set -> Map.to String.string :=
   Map.fold (fun k _ acc => Map.overriding_add k (new_name (Map.set_union reserved (Map.range acc)) k) acc) acc.
 Arguments generate_acc acc reserved names/.
 
-Definition generate : Map.set -> Map.set -> Map.to Name.name := generate_acc Map.empty.
+Definition generate : Map.set -> Map.set -> Map.to String.string := generate_acc Map.empty.
 Arguments generate reserved names/.
 
 
@@ -63,7 +56,7 @@ Proof.
     left. exists v. left. split; reflexivity.
   - invert F. 2: { left. eexists. eassumption. }
     destruct H0; cbn in *; subst. right. eexists. apply Map.find_overriding_add. left. split; reflexivity.
-  - right. destruct (Name.spec x k); subst; eexists; apply Map.find_overriding_add;
+  - right. destruct (String.eqb_spec x k); subst; eexists; apply Map.find_overriding_add;
     [left | right]. { split; reflexivity. } split; eassumption.
 Qed.
 

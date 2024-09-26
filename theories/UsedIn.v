@@ -8,7 +8,7 @@ From LinearCore Require Import
   .
 
 
-Inductive Term : Term.term -> Name.name -> Prop :=
+Inductive Term : Term.term -> String.string -> Prop :=
   | Mov name
       : Term (Term.Mov name) name
   | Ref name

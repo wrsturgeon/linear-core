@@ -1,7 +1,6 @@
 From LinearCore Require
   BoundIn
   Context
-  Name
   Term
   UsedIn
   WellFormed
@@ -12,7 +11,7 @@ From LinearCore Require Import
 
 
 
-Inductive Strict {lookup : Map.to Name.name} (O2O : Map.OneToOne lookup) : Pattern.strict -> Pattern.strict -> Prop :=
+Inductive Strict {lookup : Map.to String.string} (O2O : Map.OneToOne lookup) : Pattern.strict -> Pattern.strict -> Prop :=
   | SCtr ctor
       : Strict O2O (Pattern.Ctr ctor) (Pattern.Ctr ctor)
   | SApp
@@ -69,7 +68,7 @@ Proof.
   f_equal. eapply IHS1. { exact Eu. } exact rename_curried.
 Qed.
 
-Definition CompatibleStrict (lookup : Map.to Name.name) strict : Prop :=
+Definition CompatibleStrict (lookup : Map.to String.string) strict : Prop :=
   Map.OneToOne lookup /\
   WellFormed.Strict strict /\
   Map.Subset (BoundIn.strict strict) (Map.domain lookup).
@@ -282,7 +281,7 @@ Qed.
 
 
 
-Inductive Term {lookup : Map.to Name.name} (O2O : Map.OneToOne lookup) : Term.term -> Term.term -> Prop :=
+Inductive Term {lookup : Map.to String.string} (O2O : Map.OneToOne lookup) : Term.term -> Term.term -> Prop :=
   | Ctr ctor
       : Term O2O (Term.Ctr ctor) (Term.Ctr ctor) (* constructor names live in a different universe *)
   | Mov x y (F : Map.Find lookup x y)
@@ -476,7 +475,7 @@ Lemma term_reversible {lookup} (O2O : Map.OneToOne lookup) term renamed_term
 
 (*
 (* TODO: Grammar: should this have an `e`? I'm leaning toward yes. *)
-Definition RenameableTerm (lookup : Map.to Name.name) term : Prop :=
+Definition RenameableTerm (lookup : Map.to String.string) term : Prop :=
   Map.OneToOne lookup /\
   (forall v (B : BoundIn.Term term v) k (F : Map.Find lookup k v), k = v) /\ (* can't rename an unbound variable into a bound one *)
   forall x (U : UsedIn.Term term x), Map.In lookup x.
@@ -500,10 +499,10 @@ Proof.
     + split; intros.
       * invert B.
         -- eapply O2OU; apply not_shadowed. 2: { left. split; reflexivity. }
-           destruct (Name.spec k v); [left | right]. { subst. split; reflexivity. }
+           destruct (String.eqb_spec k v); [left | right]. { subst. split; reflexivity. }
            split. { exact N. } exact F.
         -- apply IHR1. { exact bound_in_type. } exact F.
-        -- destruct (Name.spec k variable). 2: { apply IHR2. { exact bound_in_body. }
+        -- destruct (String.eqb_spec k variable). 2: { apply IHR2. { exact bound_in_body. }
              apply not_shadowed. right. split. { exact N. } exact F. }
            subst.
            (* Definition is not precise enough: we can't map *to* a term that's bound
@@ -517,7 +516,7 @@ Qed.
 
 (* The above complication--that the exact conditions determining whether a term is renameable is just as complex as renaming them--
  * means that we can't have bidirectional implication, but being slightly too cautious makes the permissive case easy to prove: *)
-Definition ExtraSafe (lookup : Map.to Name.name) term : Prop :=
+Definition ExtraSafe (lookup : Map.to String.string) term : Prop :=
   Map.OneToOne lookup /\
   (forall v (B : BoundIn.Term term v) k (F : Map.Find lookup k v), k = v) /\ (* can't rename an unbound variable into a bound one *)
   forall x (U : UsedIn.Term term x), Map.In lookup x.
@@ -542,8 +541,8 @@ Proof.
     + apply Map.overwrite_if_present_overwrite in F as [[-> ->] | [N F]]. { reflexivity. }
       apply no_capture. { apply BoundIn.TFoB. exact B. } exact F.
     + eapply Map.in_overwrite_if_present. { apply Map.overwrite_if_present_overwrite. }
-      destruct (Name.spec x0 variable); [left | right]. { exact Y. }
-      apply covering. apply UsedIn.FoB. { exact N. } exact U.
+      destruct (String.eqb_spec x0 variable); [left | right]. { exact e. }
+      apply covering. apply UsedIn.FoB. { exact n. } exact U.
   - edestruct IHterm1; [| | edestruct IHterm2; [| | eexists; econstructor; try eassumption]]; intros.
     5: { apply BoundIn.pattern_spec. } 5: { apply Map.to_self_to_self. } 5: { apply Map.bulk_overwrite_bulk_overwrite. }
     + apply Map.bulk_overwrite_bulk_overwrite in F as [F | [N F]].
@@ -615,8 +614,8 @@ Proof.
         split; intros. { eapply O2O; eassumption. } apply no_capture. { constructor. } exact F.
       * apply Map.find_overriding_add in F as [[-> ->] | [N F]]. { reflexivity. }
         apply no_capture. { apply BoundIn.TFoB. exact B. } exact F.
-      * apply Map.in_overriding_add. destruct (Name.spec x0 variable); [left | right]. { assumption. }
-        apply covering. apply UsedIn.FoB. { exact N. } exact U.
+      * apply Map.in_overriding_add. destruct (String.eqb_spec x0 variable); [left | right]. { assumption. }
+        apply covering. apply UsedIn.FoB. { exact n. } exact U.
       * constructor. exists O2O. destruct Y. destruct Y0. econstructor.
         -- eapply term_eq; try reflexivity. { eassumption. } apply Map.eq_refl.
         -- apply Map.singleton_singleton.
@@ -683,7 +682,7 @@ Qed.
 
 
 
-Definition Context {lookup : Map.to Name.name} (O2O : Map.OneToOne lookup)
+Definition Context {lookup : Map.to String.string} (O2O : Map.OneToOne lookup)
   (context : Context.context) (renamed_context : Context.context) : Prop :=
   (*forall k' v', Map.Find renamed_context k' v' <-> exists k, (Map.Find lookup k k' /\*)
   (*  exists v, (Term lookup v v' /\ Map.Find context k v)).*)

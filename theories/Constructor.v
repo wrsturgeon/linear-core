@@ -1,5 +1,4 @@
 From LinearCore Require
-  Name
   Reflect
   .
 From LinearCore Require Import
@@ -31,13 +30,13 @@ Proof. destruct a; destruct b; constructor; try solve [intro D; discriminate D];
 
 Variant constructor : Set :=
   | Builtin (builtin : builtin)
-  | UserDefined (name : Name.name)
+  | UserDefined (name : String.string)
   .
 
 Definition eq (a b : constructor) :=
   match a, b with
   | Builtin a, Builtin b => builtin_eq a b
-  | UserDefined a, UserDefined b => Name.eqb a b
+  | UserDefined a, UserDefined b => String.eqb a b
   | _, _ => false
   end.
 Arguments eq a b/.
@@ -48,7 +47,7 @@ Proof.
   destruct a as [a | a]; destruct b as [b | b]; try (constructor; intro D; discriminate D); unfold eq.
   - destruct (builtin_eq_spec a b); constructor. { subst. reflexivity. }
     intro D. apply N. invert D. reflexivity.
-  - destruct (Name.spec a b); subst; constructor. { reflexivity. } intro E. apply N. invert E. reflexivity.
+  - destruct (String.eqb_spec a b); subst; constructor. { reflexivity. } intro E. apply n. invert E. reflexivity.
 Qed.
 
 
@@ -66,5 +65,5 @@ Definition builtin_to_string builtin : string :=
 Definition to_string ctor : string :=
   match ctor with
   | Builtin builtin => builtin_to_string builtin
-  | UserDefined name => "<" ++ Name.to_string name ++ ">"
+  | UserDefined name => "<" ++ name ++ ">"
   end.

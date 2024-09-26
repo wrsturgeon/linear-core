@@ -1,10 +1,14 @@
+From Coq Require
+  String
+  .
 From MMaps Require
-  MMaps.
+  MMaps
+  .
 From LinearCore Require
-  Name
+  OrderedString
   .
 
 
 
-Module Map := MMaps.RBT.Make(Name).
+Module Map := MMaps.RBT.Make(OrderedString).
 Include Map.

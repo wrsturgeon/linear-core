@@ -1,237 +1,148 @@
 From Coq Require
   Morphisms
   RelationClasses
+  .
+From Coq Require Import
+  Ascii
   String
   .
 From LinearCore Require
   Reflect
   .
 From LinearCore Require Import
+  DollarSign
   Invert.
 
 
 
-Variant name : Set :=
-  | Name (head : Ascii.ascii) (tail : String.string)
+Definition AsciiBetween (min max c : Ascii.ascii) : Prop :=
+  (c ?= min)%char <> Lt /\ (c ?= max)%char <> Gt.
+Arguments AsciiBetween min max c/.
+
+Definition ascii_between (min max c : Ascii.ascii) :=
+  match (c ?= min)%char with Lt => false | _ =>
+    match (c ?= max)%char with Gt => false | _ =>
+      true
+    end
+  end.
+Arguments ascii_between min max c/.
+
+Lemma ascii_between_spec min max c
+  : Reflect.Bool (AsciiBetween min max c) (ascii_between min max c).
+Proof.
+  cbn. destruct (c ?= min)%char; [| constructor; intros [N _]; apply N; reflexivity |];
+  destruct (c ?= max)%char; constructor; try (intros [_ N]; apply N; reflexivity);
+  split; intro D; discriminate D.
+Qed.
+
+
+
+Definition Digit := AsciiBetween "0" "9".
+Arguments Digit/ c.
+
+Definition digit := ascii_between "0" "9".
+Arguments digit/ c.
+
+Lemma digit_spec c : Reflect.Bool (Digit c) (digit c). Proof. apply ascii_between_spec. Qed.
+
+
+
+Definition Letter := AsciiBetween "A" "z".
+Arguments Letter/ c.
+
+Definition letter := ascii_between "A" "z".
+Arguments letter/ c.
+
+Lemma letter_spec c : Reflect.Bool (Letter c) (letter c). Proof. apply ascii_between_spec. Qed.
+
+
+
+Definition ValidCharacter (c : Ascii.ascii) : Prop :=
+  Digit c \/ Letter c \/ c = "-"%char (* \/ c = "'"%char \/ c = "_"%char *).
+Arguments ValidCharacter c/.
+
+Definition valid_character c := orb (digit c) $ orb (letter c) (c =? "-")%char.
+Arguments valid_character c/.
+
+Lemma valid_character_spec c
+  : Reflect.Bool (ValidCharacter c) (valid_character c).
+Proof.
+  apply Reflect.or. { apply digit_spec. } apply Reflect.or. { apply letter_spec. }
+  destruct (Ascii.eqb_spec c "-"); constructor; assumption.
+Qed.
+
+
+
+Inductive Primes : string -> Prop :=
+  | PNil
+      : Primes EmptyString
+  | PCons {tail} (etc : Primes tail)
+      : Primes $ String "'" tail
   .
+Arguments Primes s.
 
-
-
-Definition eqb a b :=
-  match a with Name ha ta =>
-    match b with Name hb tb =>
-      andb (Ascii.eqb ha hb) (String.eqb ta tb)
-    end
+Fixpoint primes s :=
+  match s with EmptyString => true | String head tail =>
+    andb (head =? "'")%char $ primes tail
   end.
 
-Lemma spec a b
-  : Reflect.Bool (a = b) (eqb a b).
+Lemma primes_spec s
+  : Reflect.Bool (Primes s) (primes s).
 Proof.
-  destruct a as [ha ta]. destruct b as [hb tb]. cbn.
-  destruct (Ascii.eqb_spec ha hb). 2: { constructor. intro D. invert D. apply n. reflexivity. }
-  destruct (String.eqb_spec ta tb); constructor. { f_equal; assumption. }
-  intro D. invert D. apply n. reflexivity.
-Qed.
-
-Lemma eqb_refl s
-  : eqb s s = true.
-Proof. destruct s as [head tail]. cbn. rewrite Ascii.eqb_refl. rewrite String.eqb_refl. reflexivity. Qed.
-
-Lemma eqb_eq a b
-  : a = b <-> eqb a b = true.
-Proof.
-  destruct a as [ha ta]. destruct b as [hb tb]. cbn. split; intro E.
-  - invert E; subst. rewrite Ascii.eqb_refl. rewrite String.eqb_refl. reflexivity.
-  - destruct (Ascii.eqb_spec ha hb). 2: { discriminate E. } destruct (String.eqb_spec ta tb). 2: { discriminate E. }
-    f_equal; assumption.
-Qed.
-
-Lemma eqb_neq a b
-  : a <> b <-> eqb a b = false.
-Proof.
-  destruct a as [ha ta]. destruct b as [hb tb]. cbn. split; intro N.
-  - destruct (Ascii.eqb_spec ha hb). 2: { reflexivity. } destruct (String.eqb_spec ta tb). 2: { reflexivity. }
-    subst. contradiction N. reflexivity.
-  - intro E. invert E; subst. rewrite Ascii.eqb_refl in N. rewrite String.eqb_refl in N. discriminate N.
-Qed.
-
-Lemma eqb_sym a b
-  : eqb a b = eqb b a.
-Proof.
-  intros. destruct (spec b a). { subst. apply eqb_refl. }
-  destruct (spec a b). 2: { reflexivity. } subst. contradiction N. reflexivity.
+  induction s; cbn. { constructor. constructor. }
+  destruct (Ascii.eqb_spec a "'"). 2: { constructor. intro C. invert C. apply n. reflexivity. }
+  subst. destruct IHs; constructor. { constructor. exact Y. } intro C. invert C. apply N in etc as [].
 Qed.
 
 
 
-Definition to_string s :=
-  match s with Name head tail =>
-    String.String head tail
+Inductive ValidTail : string -> Prop :=
+  | VPrimes {primes} (all_rest_primes : Primes primes)
+      : ValidTail primes
+  | VCons {head} (valid_first : ValidCharacter head) {tail} (etc : ValidTail tail)
+      : ValidTail $ String head tail
+  .
+Arguments ValidTail s.
+
+Fixpoint valid_tail s :=
+  if primes s then true else
+    match s with EmptyString => true | String head tail =>
+      andb (valid_character head) (valid_tail tail)
+    end.
+
+Lemma valid_tail_string head tail
+  : valid_tail (String head tail) = orb (andb (head =? "'")%char $ primes tail) $ andb (valid_character head) (valid_tail tail).
+Proof. reflexivity. Qed.
+
+Lemma valid_tail_spec s
+  : Reflect.Bool (ValidTail s) (valid_tail s).
+Proof.
+  induction s. { constructor. constructor. constructor. } rewrite valid_tail_string. destruct (Ascii.eqb_spec a "'").
+  - subst. cbn. destruct (primes_spec s); constructor. { constructor. constructor. exact Y. }
+    intro C. invert C. { invert all_rest_primes. apply N in etc as []. } cbn in valid_first.
+    destruct valid_first as [[C _] | [[C _] | D]]; try (contradiction C; reflexivity); discriminate D.
+  - rewrite Bool.andb_false_l. rewrite Bool.orb_false_l. destruct (valid_character_spec a). 2: {
+      constructor. intro C. invert C. { invert all_rest_primes. apply n. reflexivity. } apply N in valid_first as []. }
+    cbn. destruct IHs; constructor. { apply VCons. { exact Y. } exact Y0. }
+    intro C. invert C. invert all_rest_primes. { apply n. reflexivity. } apply N in etc as [].
+Qed.
+
+
+
+Definition Valid s := exists head tail, Letter head /\ ValidTail tail /\ s = String head tail.
+Arguments Valid s/.
+
+Definition valid s :=
+  match s with EmptyString => false | String head tail =>
+    andb (letter head) (valid_tail tail)
   end.
+Arguments valid s/.
 
-Definition from_string s :=
-  match s with
-  | String.EmptyString => None
-  | String.String head tail => Some (Name head tail)
-  end.
-
-Lemma roundtrip s
-  : from_string (to_string s) = Some s.
-Proof. destruct s as [head tail]. reflexivity. Qed.
-
-
-
-Definition compare a b :=
-  match a with Name ha ta =>
-    match b with Name hb tb =>
-      match Ascii.compare ha hb with
-      | Eq => String.compare ta tb
-      | Lt => Lt
-      | Gt => Gt
-      end
-    end
-  end.
-
-Lemma ascii_refl a
-  : Ascii.compare a a = Eq.
+Lemma valid_spec s
+  : Reflect.Bool (Valid s) (valid s).
 Proof.
-  destruct Ascii.compare eqn:E; [reflexivity | |]; assert (D := E);
-  rewrite Ascii.compare_antisym in D; rewrite E in D; discriminate D.
-Qed.
-
-Lemma string_refl s
-  : String.compare s s = Eq.
-Proof.
-  destruct String.compare eqn:E; [reflexivity | |]; assert (D := E);
-  rewrite String.compare_antisym in D; rewrite E in D; discriminate D.
-Qed.
-
-Lemma compare_refl s
-  : compare s s = Eq.
-Proof. destruct s as [head tail]. cbn. rewrite ascii_refl. rewrite string_refl. reflexivity. Qed.
-
-Lemma ascii_trans
-  x y (Lxy : Ascii.compare x y = Lt)
-  z (Lyz : Ascii.compare y z = Lt)
-  : Ascii.compare x z = Lt.
-Proof.
-  unfold Ascii.compare in *.
-  destruct (BinNat.N.compare_spec (Ascii.N_of_ascii x) (Ascii.N_of_ascii y)); try discriminate Lxy; clear Lxy.
-  destruct (BinNat.N.compare_spec (Ascii.N_of_ascii y) (Ascii.N_of_ascii z)); try discriminate Lyz; clear Lyz.
-  eapply BinNat.N.lt_strorder; eassumption.
-Qed.
-
-Lemma string_trans
-  x y (Lxy : String.compare x y = Lt)
-  z (Lyz : String.compare y z = Lt)
-  : String.compare x z = Lt.
-Proof.
-  generalize dependent z. generalize dependent y. induction x as [| hx tx]; intros;
-  (destruct y as [| hy ty]; [discriminate Lxy |]; destruct z as [| hz tz]; [discriminate Lyz |]). { reflexivity. }
-  cbn in *. destruct (Ascii.compare hx hy) eqn:Axy. 3: { discriminate Lxy. } { apply Ascii.compare_eq_iff in Axy.
-    subst. destruct (Ascii.compare hy hz) eqn:Ayz. { eapply IHtx; eassumption. } { reflexivity. } assumption. }
-  destruct (Ascii.compare hy hz) eqn:Ayz. 3: { discriminate Lyz. } {
-    apply Ascii.compare_eq_iff in Ayz. subst. rewrite Axy. reflexivity. }
-  erewrite ascii_trans; eassumption.
-Qed.
-
-Lemma trans
-  x y (Lxy : compare x y = Lt)
-  z (Lyz : compare y z = Lt)
-  : compare x z = Lt.
-Proof.
-  destruct x as [hx tx]. destruct y as [hy ty]. destruct z as [hz tz]. cbn in *.
-  destruct (Ascii.compare hx hy) eqn:Axy. 3: { discriminate Lxy. } {
-    apply Ascii.compare_eq_iff in Axy. subst.
-    destruct Ascii.compare eqn:Ayz. 2: { reflexivity. } 2: { discriminate Lyz. } eapply string_trans; eassumption. }
-  destruct (Ascii.compare hy hz) eqn:Ayz. 3: { discriminate Lyz. } {
-    apply Ascii.compare_eq_iff in Ayz. subst. rewrite Axy. reflexivity. }
-  erewrite ascii_trans; eassumption.
-Qed.
-
-Lemma antisym a b
-  : compare a b = CompOpp (compare b a).
-Proof.
-  destruct a as [ha ta]. destruct b as [hb tb]. cbn. rewrite Ascii.compare_antisym. rewrite String.compare_antisym.
-  destruct (Ascii.compare hb ha) eqn:A; reflexivity.
-Qed.
-
-Lemma compare_eq a b
-  : compare a b = Eq <-> a = b.
-Proof.
-  destruct a as [ha ta]. destruct b as [hb tb]. cbn. split; intro E.
-  - destruct (Ascii.compare ha hb) eqn:A; try discriminate E.
-    apply Ascii.compare_eq_iff in A. apply String.compare_eq_iff in E. f_equal; assumption.
-  - invert E; subst. rewrite ascii_refl. apply string_refl.
-Qed.
-
-
-
-Definition leb a b :=
-  match compare a b with
-  | Lt | Eq => true
-  | Gt => false
-  end.
-Arguments leb a b/.
-
-
-
-Lemma eq_dec (x y : name)
-  : {x = y} + {x <> y}.
-Proof.
-  destruct x as [hx tx]. destruct y as [hy ty].
-  destruct (Ascii.eqb_spec hx hy). 2: { right. intro D. invert D. apply n. reflexivity. }
-  destruct (String.eqb_spec tx ty); [left | right]. 2: { intro D. invert D. apply n. reflexivity. }
-  f_equal; assumption.
-Qed.
-
-
-
-Definition t := name.
-Arguments t/.
-
-Definition lt a b := compare a b = Lt.
-Arguments lt a b/.
-
-Definition eq := @eq t.
-Arguments eq/ a b : rename.
-
-Lemma eq_equiv
-  : RelationClasses.Equivalence eq.
-Proof.
-  constructor.
-  - constructor.
-  - unfold RelationClasses.Symmetric. intros. cbn in *. subst. reflexivity.
-  - unfold RelationClasses.Transitive. intros. cbn in *. subst. reflexivity.
-Qed.
-
-Lemma lt_strorder
-  : RelationClasses.StrictOrder lt.
-Proof.
-  constructor.
-  - unfold RelationClasses.Irreflexive. unfold RelationClasses.complement.
-    unfold RelationClasses.Reflexive. intros. cbn in *. rewrite compare_refl in H. discriminate H.
-  - unfold RelationClasses.Transitive. intros. eapply trans; eassumption.
-Qed.
-
-Lemma lt_compat
-  : Morphisms.Proper (Morphisms.respectful eq (Morphisms.respectful eq iff)) lt.
-Proof.
-  unfold Morphisms.Proper. unfold Morphisms.respectful. cbn in *.
-  intros x' x Ex y' y Ey. subst. split; intros; assumption.
-Qed.
-
-Lemma compare_spec x y
-  : CompareSpec (eq x y) (lt x y) (lt y x) (compare x y).
-Proof.
-  intros. cbn. rewrite antisym. destruct (compare y x) eqn:Ec; constructor; try reflexivity.
-  apply compare_eq in Ec. subst. reflexivity.
-Qed.
-
-Lemma leb_total x y
-  : leb x y = true \/ leb y x = true.
-Proof.
-  destruct x as [hx tx]. destruct y as [hy ty]. cbn. rewrite Ascii.compare_antisym.
-  destruct (Ascii.compare hy hx) eqn:Ea; [| right | left]; try reflexivity.
-  rewrite String.compare_antisym. destruct (String.compare ty tx) eqn:Es; [left | right | left]; reflexivity.
+  unfold valid. destruct s. { constructor. intros [head [tail [L [V E]]]]. discriminate E. }
+  destruct (letter_spec a). 2: { constructor. intros [head [tail [L [V E]]]]. invert E. apply N in L as []. }
+  destruct (valid_tail_spec s); constructor. { do 2 eexists. split. { exact Y. } split. { exact Y0. } reflexivity. }
+  intros [head [tail [L [V E]]]]. invert E. apply N in V as [].
 Qed.
