@@ -271,6 +271,9 @@ Arguments Add {T} k v m m'/.
 Definition overriding_add : forall T, String.string -> T -> to T -> to T := @MapCore.add.
 Arguments overriding_add {T} k v m : simpl never.
 
+Definition set_add k := overriding_add k tt.
+Arguments set_add k/ m.
+
 Definition checked_add {T} (eqb : T -> T -> bool) k v (m : to T) :=
   match find m k with
   | None => Some (overriding_add k v m)
@@ -684,6 +687,9 @@ Arguments map {X Y} f m : simpl never.
 
 
 
+Definition Domain {T} (m : to T) (d : set) : Prop := forall k, In m k <-> In d k.
+Arguments Domain {T} m d/.
+
 Definition domain {T} : to T -> set := map (fun k v => tt).
 Arguments domain {T} m/.
 
@@ -705,6 +711,10 @@ Qed.
 Lemma in_domain {T} k (m : to T)
   : In (domain m) k <-> In m k.
 Proof. rewrite <- (find_domain k tt m). split; [intros [[] F] | intro F; exists tt]; exact F. Qed.
+
+Lemma domain_domain {T} (m : to T)
+  : Domain m (domain m).
+Proof. intro k. rewrite in_domain. reflexivity. Qed.
 
 
 

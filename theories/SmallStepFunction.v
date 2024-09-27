@@ -20,6 +20,7 @@ Definition to_string (h : Halt.halt (Context.context * Term.term)) : string :=
   | Halt.OutOfFuel => "<out of time>"
   end.
 
+(*
 Fixpoint step (fuel : Fuel.fuel) (context : Context.context) (term : Term.term) : Halt.halt (Context.context * Term.term) :=
   VerbosePrint.format to_string $
   match fuel with Fuel.Stop => Halt.OutOfFuel | Fuel.Continue fuel =>
@@ -183,20 +184,16 @@ Proof.
   - unfold step. destruct term1 as [| | | | | pattern body_if_match other_cases];
     try solve [constructor; intros [m t] C; invert C]. destruct andb eqn:E.
     + admit.
-    + edestruct (@Rename.pattern_spec
-        (NewNames.generate
-          (Map.overriding_union (Map.domain context)
-            (UsedIn.term (Term.App (Term.Cas pattern body_if_match other_cases) term2)))
-          (BoundIn.pattern pattern))
-        (NewNames.one_to_one_generate _ _)
-        pattern).
+    + edestruct (@Rename.pattern_spec (NewNames.generate (Map.overriding_union (Map.domain context)
+          (UsedIn.term (Term.App (Term.Cas pattern body_if_match other_cases) term2)))
+        (BoundIn.pattern pattern)) (NewNames.one_to_one_generate _ _) pattern).
       * destruct (@Rename.term_spec (Map.bulk_overwrite (NewNames.generate
           (Map.overriding_union (Map.domain context) (UsedIn.term (Term.App (Term.Cas pattern body_if_match other_cases) term2)))
           (BoundIn.pattern pattern)) (Map.to_self (UsedIn.term body_if_match))) body_if_match).
         -- split; [| split]; intros.
            ++ eapply Map.one_to_one_bulk_overwrite. { apply Map.bulk_overwrite_bulk_overwrite. }
-              split. { apply NewNames.one_to_one_generate. }
-              split; intros. { apply Map.to_self_to_self in F1 as [I1 ->]. apply Map.to_self_to_self in F2 as [I2 ->]. reflexivity. }
+              split. { apply NewNames.one_to_one_generate. } split; intros. {
+                apply Map.to_self_to_self in F1 as [I1 ->]. apply Map.to_self_to_self in F2 as [I2 ->]. reflexivity. }
               apply Map.to_self_to_self in Fo as [Io ->].
 Abort. (*
 
@@ -266,4 +263,5 @@ Abort. (*
       apply Bool.andb_true_iff in E as [Ec Ed]. destruct (Match.compatible_spec context pattern) as [CP |]; invert Ec.
       destruct (Map.disjoint_spec (UsedIn.term term2) (BoundIn.pattern pattern)) as [D |]; invert Ed.
 Abort. (* TODO *)
+*)
 *)
