@@ -17,6 +17,7 @@ Definition get_or_add m reserved k :=
       let v := NewNames.new_name reserved k in
       (Map.overriding_add k v m, Map.set_add v reserved, v)
   end.
+Arguments get_or_add m reserved k/.
 
 Definition get_or_add_det {m1 r1 k1 m1' r1' v1} (E1 : get_or_add m1 r1 k1 = (m1', r1', v1))
   {m2} (Em : Map.Eq m1 m2)
@@ -151,12 +152,12 @@ Proof.
   subst. rename t2 into t. generalize dependent r2. generalize dependent r1.
   generalize dependent a2. generalize dependent a1. induction t; intros.
   - cbn. constructor; assumption.
-  - cbn.
+  - unfold unshadow_acc.
     destruct (get_or_add a1 r1 name) as [[a1'' r1''] t1] eqn:E1.
     destruct (get_or_add a2 r2 name) as [[a2'' r2''] t2] eqn:E2.
     destruct (get_or_add_det E1 Ea Er eq_refl E2) as [Ea'' [Er'' ->]].
     cbn. constructor; assumption.
-  - cbn.
+  - unfold unshadow_acc.
     destruct (get_or_add a1 r1 name) as [[a1'' r1''] t1] eqn:E1.
     destruct (get_or_add a2 r2 name) as [[a2'' r2''] t2] eqn:E2.
     destruct (get_or_add_det E1 Ea Er eq_refl E2) as [Ea'' [Er'' ->]].
@@ -210,3 +211,123 @@ Proof.
     (split; [| reflexivity]); (eapply Map.in_eq; [| exact I]); [apply Map.eq_sym |]; exact Er.
   - unfold unshadow. destruct (det_acc A Er Et); reflexivity.
 Qed.
+
+Lemma range {acc reserved term acc' reserved' renamed}
+  (E : unshadow_acc acc reserved term = Some (acc', reserved', renamed))
+  (prev : forall x y (Fa : Map.Find acc x y), Map.In reserved y) x y (Fa : Map.Find acc' x y)
+  : Map.In reserved' y.
+Proof.
+  generalize dependent y. generalize dependent x. generalize dependent renamed. generalize dependent reserved'.
+  generalize dependent acc'. generalize dependent reserved. generalize dependent acc. induction term; intros; cbn in *.
+  - invert E. eapply prev. exact Fa.
+  - destruct (Map.find_spec acc name) as [name' F | N]; invert E. { eapply prev. exact Fa. }
+    apply Map.in_overriding_add. apply Map.find_overriding_add in Fa as [[-> ->] | [Na Fa]]. { left. reflexivity. }
+    right. eapply prev. exact Fa.
+  - destruct (Map.find_spec acc name) as [name' F | N]; invert E. { eapply prev. exact Fa. }
+    apply Map.in_overriding_add. apply Map.find_overriding_add in Fa as [[-> ->] | [Na Fa]]. { left. reflexivity. }
+    right. eapply prev. exact Fa.
+  - destruct (unshadow_acc acc reserved term1) as [[[a1 r1] f1] |] eqn:E1. 2: { discriminate E. }
+    destruct (unshadow_acc a1 r1 term2) as [[[a2 r2] f2] |] eqn:E2; invert E. eapply IHterm2. 2: { exact E2. } 2: { exact Fa. }
+    eapply IHterm1. 2: { exact E1. } exact prev.
+  - destruct (unshadow_acc acc reserved term1) as [[[a1 r1] f1] |] eqn:E1. 2: { discriminate E. }
+    destruct (unshadow_acc (Map.overriding_add variable (NewNames.new_name r1 variable) a1)
+      (Map.overriding_add (NewNames.new_name r1 variable) tt r1) term2) as [[[a2 r2] f2] |] eqn:E2; invert E.
+    eapply IHterm2. 2: { exact E2. } 2: { exact Fa. } intros k v F. apply Map.in_overriding_add.
+    apply Map.find_overriding_add in F as [[-> ->] | [N F]]; [left | right]. { reflexivity. }
+    eapply IHterm1. 2: { exact E1. } 2: { exact F. } exact prev.
+  - destruct (unshadow_acc acc reserved term2) as [[[a2 r2] f2] |] eqn:E2. 2: { discriminate E. }
+    eassert (rew : NewNames.generate r2 (BoundIn.pattern pattern) = _). { reflexivity. }
+    simpl NewNames.generate in rew at 1. rewrite rew in E. clear rew.
+    destruct Rename.pattern as [pattern' |] eqn:R. 2: { discriminate E. }
+    destruct (unshadow_acc (Map.overriding_union (NewNames.generate r2 $ BoundIn.pattern pattern) a2)
+      (Map.overriding_union (Map.fold (fun _ v acc => Map.overriding_add v tt acc)
+        Map.empty (NewNames.generate r2 $ BoundIn.pattern pattern)) r2) term1) as [[[a1 r1] f1] |] eqn:E1; invert E.
+    eapply IHterm1. 2: { exact E1. } 2: { exact Fa. } intros k v F. apply Map.in_overriding_union.
+    apply Map.bulk_overwrite_bulk_overwrite in F as [F | [N F]]. { left. apply Map.in_range. eexists. exact F. }
+    right. eapply IHterm2. 2: { exact E2. } 2: { exact F. } exact prev.
+Qed.
+
+Lemma used {acc reserved term acc' used renamed}
+  (E : unshadow_acc acc reserved term = Some (acc', used, renamed))
+  (prev : forall x y (Fa : Map.Find acc x y), Map.In reserved y)
+  : Map.Reflect (fun x => UsedIn.Term renamed x \/ BoundIn.Term renamed x \/ Map.In reserved x) used.
+Proof.
+  assert (R := range E prev). generalize dependent renamed. generalize dependent used.
+  generalize dependent acc'. generalize dependent reserved. generalize dependent acc. induction term; intros.
+  - cbn in E. invert E. split. { intro I. right. right. exact I. }
+    intros [U | [B | I]]. { invert U. } { invert B. } exact I.
+  - cbn in E. destruct (Map.find_spec acc name) as [name' F | N]; invert E.
+    + split. { intro I. right. right. exact I. }
+      intros [U | [B | I]]. { invert U. eapply R. exact F. } { invert B. } exact I.
+    + intro x. rewrite Map.in_overriding_add. split. { intros [-> | I]. { left. constructor. } right. right. exact I. }
+      intros [U | [B | I]]; [left | | right]. { invert U. reflexivity. } { invert B. } exact I.
+  - cbn in E. destruct (Map.find_spec acc name) as [name' F | N]; invert E.
+    + split. { intro I. right. right. exact I. }
+      intros [U | [B | I]]. { invert U. eapply R. exact F. } { invert B. } exact I.
+    + intro x. rewrite Map.in_overriding_add. split. { intros [-> | I]. { left. constructor. } right. right. exact I. }
+      intros [U | [B | I]]; [left | | right]. { invert U. reflexivity. } { invert B. } exact I.
+  - cbn in E. destruct unshadow_acc as [[[a1 r1] t1] |] eqn:E1 in E. 2: { discriminate E. }
+    destruct unshadow_acc as [[[a2 r2] t2] |] eqn:E2 in E; invert E. assert (R1 := range E1 prev).
+    eapply IHterm1 in E1; try eassumption. eapply IHterm2 in E2; try eassumption. split.
+    + intro I. apply E2 in I as [U | [B | I]].
+      * left. apply UsedIn.ApA. exact U.
+      * right. left. apply BoundIn.TApA. exact B.
+      * apply E1 in I as [U | [B | I]]; [left | right; left | right; right].
+        { apply UsedIn.ApF. exact U. } { apply BoundIn.TApF. exact B. } exact I.
+    + intro UI. apply E2. destruct UI as [U | [B | I]].
+      * invert U. 2: { left. exact used_in_argument. } right. right. apply E1. left. exact used_in_function.
+      * invert B. 2: { right. left. exact bound_in_argument. }
+        right. right. apply E1. right. left. exact bound_in_function.
+      * right. right. apply E1. right. right. exact I.
+  - rewrite unshadow_acc_for in E. destruct unshadow_acc as [[[a1 r1] t1] |] eqn:E1 in E. 2: { discriminate E. }
+    destruct unshadow_acc as [[[a2 r2] t2] |] eqn:E2 in E; invert E. assert (R1 := range E1 prev).
+    eapply IHterm1 in E1; try eassumption. eapply IHterm2 in E2; try eassumption. 2: { intros. apply Map.in_overriding_add.
+      apply Map.find_overriding_add in Fa as [[-> ->] | [Na Fa]]; [left | right]. { reflexivity. } eapply R1. exact Fa. }
+    split.
+    + intro I. destruct (String.eqb_spec x (NewNames.new_name r1 variable)). { subst. right. left. apply BoundIn.TFoV. }
+      apply E2 in I as [U | [B | I]]. { left. apply UsedIn.FoB; assumption. } { right. left. apply BoundIn.TFoB. exact B. }
+      apply Map.in_overriding_add in I as [C | I]. { apply n in C as []. }
+      apply E1 in I as [U | [B | I]]. { left. apply UsedIn.FoT. exact U. } { right. left. apply BoundIn.TFoT. exact B. }
+      right. right. exact I.
+    + intro UBI. apply E2. unfold Map.set_add. rewrite Map.in_overriding_add. destruct UBI as [U | [B | I]].
+      * invert U. 2: { left. exact used_in_body. } right. right. right. apply E1. left. exact used_in_type.
+      * invert B. { right. right. left. reflexivity. } 2: { right. left. exact bound_in_body. }
+        right. right. right. apply E1. right. left. exact bound_in_type.
+      * right. right. right. apply E1. right. right. exact I.
+  - rewrite unshadow_acc_cas in E. destruct unshadow_acc as [[[a1 r1] t1] |] eqn:E1 in E. 2: { discriminate E. }
+    destruct Rename.pattern eqn:ER in E. 2: { discriminate E. }
+    destruct unshadow_acc as [[[a2 r2] t2] |] eqn:E2 in E; invert E. assert (R1 := range E1 prev).
+    eapply IHterm2 in E1; try eassumption. eapply IHterm1 in E2; try eassumption. 2: { intros. apply Map.in_overriding_union.
+      apply Map.bulk_overwrite_bulk_overwrite in Fa as [Fa | [Na Fa]]. 2: { right. eapply R1. exact Fa. }
+      left. apply Map.in_range. eexists. exact Fa. }
+    split.
+    + intro I. destruct (BoundIn.pattern_spec p x). { right. left. apply BoundIn.TCaP. exact Y. }
+      apply E2 in I as [U | [B | I]]. { left. apply UsedIn.CaB; assumption. } { right. left. apply BoundIn.TCaB. exact B. }
+      apply Map.in_overriding_union in I as [I | I].
+      * apply Map.in_range in I as [z F]. Abort. (*
+      * apply E1 in I as [U | [B | I]].
+      apply E1 in I as [U | [B | I]]. { left. apply UsedIn.FoT. exact U. } { right. left. apply BoundIn.TFoT. exact B. }
+      right. right. exact I.
+    + intro UBI. apply E2. rewrite Map.in_overriding_add. destruct UBI as [U | [B | I]].
+      * invert U. 2: { left. exact used_in_body. } right. right. right. apply E1. left. exact used_in_type.
+      * invert B. { right. right. left. reflexivity. } 2: { right. left. exact bound_in_body. }
+        right. right. right. apply E1. right. left. exact bound_in_type.
+      * right. right. right. apply E1. right. right. exact I.
+Qed.
+
+
+
+Inductive Unshadowed : Term.term -> Prop :=
+  | Ctr ctor
+      : Unshadowed (Term.Ctr ctor)
+  | Mov name
+      : Unshadowed (Term.Mov name)
+  | Ref name
+      : Unshadowed (Term.Ref name)
+  | App
+      {function} (Uf : Unshadowed function)
+      {argument} (Ua : Unshadowed argument)
+      (disj_f_a : forall x (Bf : BoundIn.Term function x) (Ua : UsedIn.Term argument x), False)
+      (disj_a_f : forall x (Ba : BoundIn.Term argument x) (Uf : UsedIn.Term function x), False)
+      : Unshadowed (Term.App function argument)
+  . *)

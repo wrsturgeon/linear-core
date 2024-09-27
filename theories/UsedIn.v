@@ -69,8 +69,8 @@ Proof.
     + intros [v F]. apply Map.union_overriding in F as [F | F]; [| | intros ? [] ? []; reflexivity]. {
         apply CaO. apply IHt2. eexists. exact F. }
       apply Map.minus_minus in F as [F N]. apply CaB. 2: { eapply IHt1. eexists. exact F. }
-      intro B. apply N. apply BoundIn.pattern_spec. exact B.
+      intro B. apply N. apply BoundIn.pattern_iff. exact B.
     + intro T. invert T; [apply IHt1 in used_in_body as [v IH] | apply IHt2 in used_in_another_case as [v IH]];
       eexists; (apply Map.union_overriding; [intros ? [] ? []; reflexivity |]); [right | left]. 2: { exact IH. }
-      apply Map.minus_minus. split. { exact IH. } intro B. apply not_shadowed. apply BoundIn.pattern_spec. exact B.
+      apply Map.minus_minus. split. { exact IH. } intro B. apply not_shadowed. apply BoundIn.pattern_iff. exact B.
 Qed.

@@ -135,7 +135,7 @@ Lemma compatible_strict_spec context strict
   : Reflect.Bool (CompatibleStrict context strict) (compatible_strict context strict).
 Proof.
   eapply Reflect.bool_eq. 2: { apply Map.disjoint_spec. }
-  split; intros F k I B; (eapply F; [exact I |]); apply BoundIn.strict_spec; exact B.
+  split; intros F k I B; (eapply F; [exact I |]); apply BoundIn.strict_iff; exact B.
 Qed.
 
 
@@ -440,10 +440,10 @@ Lemma compatible_move_or_reference_spec context move_or_reference
 Proof.
   eapply Reflect.bool_eq. 2: { apply Map.disjoint_spec. }
   destruct move_or_reference; (split; intro F; [invert F | constructor]); intros k I B.
-  - eapply strict_compatible. { exact I. } apply BoundIn.strict_spec. exact B.
-  - eapply F. { exact I. } apply BoundIn.strict_spec. exact B.
-  - eapply strict_compatible. { exact I. } apply BoundIn.strict_spec. exact B.
-  - eapply F. { exact I. } apply BoundIn.strict_spec. exact B.
+  - eapply strict_compatible. { exact I. } apply BoundIn.strict_iff. exact B.
+  - eapply F. { exact I. } apply BoundIn.strict_iff. exact B.
+  - eapply strict_compatible. { exact I. } apply BoundIn.strict_iff. exact B.
+  - eapply F. { exact I. } apply BoundIn.strict_iff. exact B.
 Qed.
 
 
@@ -543,9 +543,9 @@ Proof.
   - invert F.
     + intros k I B. apply N. apply Map.in_singleton in B as ->. exact I.
     + intros k I B. invert move_or_reference_compatible; (eapply strict_compatible; [exact I |]);
-      apply BoundIn.strict_spec; exact B.
+      apply BoundIn.strict_iff; exact B.
   - destruct pattern; simpl BoundIn.pattern in *.
     + constructor. intro I. eapply F. { exact I. } apply Map.in_singleton. reflexivity.
     + constructor. destruct move_or_reference0; simpl BoundIn.move_or_reference in *; constructor;
-      intros k I B; (eapply F; [exact I |]); apply BoundIn.strict_spec; exact B.
+      intros k I B; (eapply F; [exact I |]); apply BoundIn.strict_iff; exact B.
 Qed.

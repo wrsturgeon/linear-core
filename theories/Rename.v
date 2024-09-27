@@ -78,7 +78,7 @@ Lemma compatible_if_strict {lookup} {O2O : Map.OneToOne lookup} {strict renamed_
 Proof.
   induction S. { split. { exact O2O. } split. { constructor. } intros k v F. invert F. }
   destruct IHS as [O2OU' [WF SS]]. split. { exact O2O. } split.
-  - constructor. { exact WF. } intro B. apply BoundIn.strict_spec in B as [[] B]. apply SS in B.
+  - constructor. { exact WF. } intro B. apply BoundIn.strict_iff in B as [[] B]. apply SS in B.
     apply Map.find_domain in B as [name B]. apply rename_argument in B as [N _]. apply N. reflexivity.
   - intros k v F. apply Map.find_domain. cbn in F. apply Map.find_overriding_add in F as [[-> ->] | [N F]].
     + destruct rename_argument as [F R]. eexists. exact F.
@@ -100,7 +100,7 @@ Proof.
       split. { eapply Map.one_to_one_remove_if_present. 2: { apply Map.remove_if_present_remove. } exact O2O. }
       split. { exact curried_well_formed. } intros k v F. apply Map.find_domain.
       eapply Map.in_remove_if_present. { apply Map.remove_if_present_remove. }
-      assert (Nk : k <> argument). { intros ->. apply N. apply BoundIn.strict_spec. eexists. exact F. }
+      assert (Nk : k <> argument). { intros ->. apply N. apply BoundIn.strict_iff. eexists. exact F. }
       split. { exact Nk. } eapply Map.find_domain. apply S. cbn. apply Map.find_overriding_add.
       right. split. { exact Nk. } exact F. }
     apply IHstrict in C as [O2OR [renamed_strict C]]. exists O2O. eexists. econstructor. 2: { exact C. }

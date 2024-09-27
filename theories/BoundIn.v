@@ -29,11 +29,18 @@ Fixpoint strict s : Map.set :=
   | Pattern.App curried argument => Map.overriding_add argument tt (strict curried)
   end.
 
-Lemma strict_spec : Reflect Strict strict. Proof.
+Lemma strict_iff : Reflect Strict strict. Proof.
   split.
   - intro I. generalize dependent x. induction t; intros; cbn in *. { destruct I as [y F]. invert F. }
     apply Map.in_overriding_add in I as [-> | I]; [left | right]. apply IHt. exact I.
   - intro S. induction S; cbn; apply Map.in_overriding_add; [left | right]. { reflexivity. } exact IHS.
+Qed.
+
+Lemma strict_spec p s
+  : Reflect.Bool (Strict p s) (Map.in_ (strict p) s).
+Proof.
+  destruct (Map.in_spec (strict p) s); constructor. { apply strict_iff. exact Y. }
+  intro C. apply N. apply strict_iff. exact C.
 Qed.
 
 
@@ -48,9 +55,16 @@ Variant MoveOrReference : forall (pattern : Pattern.move_or_reference) (name : S
 Definition move_or_reference p : Map.set :=
   match p with Pattern.Mov s | Pattern.Ref s => strict s end.
 
-Lemma move_or_reference_spec : Reflect MoveOrReference move_or_reference. Proof.
-  assert (S := strict_spec). cbn in S. intros [] x; cbn; rewrite S;
+Lemma move_or_reference_iff : Reflect MoveOrReference move_or_reference. Proof.
+  assert (S := strict_iff). cbn in S. intros [] x; cbn; rewrite S;
   (split; intro H; [constructor; exact H | invert H; assumption]).
+Qed.
+
+Lemma move_or_reference_spec mr s
+  : Reflect.Bool (MoveOrReference mr s) (Map.in_ (move_or_reference mr) s).
+Proof.
+  destruct (Map.in_spec (move_or_reference mr) s); constructor. { apply move_or_reference_iff. exact Y. }
+  intro C. apply N. apply move_or_reference_iff. exact C.
 Qed.
 
 
@@ -68,14 +82,21 @@ Definition pattern p : Map.set :=
   | Pattern.Pat mr => move_or_reference mr
   end.
 
-Lemma pattern_spec : Reflect Pattern pattern. Proof.
+Lemma pattern_iff : Reflect Pattern pattern. Proof.
   split.
   - intro I. generalize dependent x. induction t; intros; cbn in *.
     + apply Map.in_singleton in I as ->. constructor.
-    + constructor. apply move_or_reference_spec. exact I.
+    + constructor. apply move_or_reference_iff. exact I.
   - intro S. invert S; cbn.
     + apply Map.in_singleton. reflexivity.
-    + apply move_or_reference_spec. exact bound_in_move_or_reference.
+    + apply move_or_reference_iff. exact bound_in_move_or_reference.
+Qed.
+
+Lemma pattern_spec p s
+  : Reflect.Bool (Pattern p s) (Map.in_ (pattern p) s).
+Proof.
+  destruct (Map.in_spec (pattern p) s); constructor. { apply pattern_iff. exact Y. }
+  intro C. apply N. apply pattern_iff. exact C.
 Qed.
 
 
@@ -109,14 +130,14 @@ Fixpoint term t : Map.set :=
   | _ => Map.empty
   end.
 
-Lemma term_spec : Reflect Term term. Proof.
+Lemma term_iff : Reflect Term term. Proof.
   split.
   - intro I. generalize dependent x. induction t; intros;
     simpl term in *; try solve [apply Map.empty_empty in I as []].
     + apply Map.in_overriding_union in I as [I | I]; [apply TApF | apply TApA]; [apply IHt1 | apply IHt2]; exact I.
     + apply Map.in_overriding_add in I as [-> | I]. { apply TFoV. }
       apply Map.in_overriding_union in I as [I | I]; [apply TFoT | apply TFoB]; [apply IHt1 | apply IHt2]; exact I.
-    + apply Map.in_overriding_union in I as [I | I]. { apply TCaP. apply pattern_spec. exact I. }
+    + apply Map.in_overriding_union in I as [I | I]. { apply TCaP. apply pattern_iff. exact I. }
       apply Map.in_overriding_union in I as [I | I]; [apply TCaB | apply TCaO]; [apply IHt1 | apply IHt2]; exact I.
   - intro T. induction T; simpl term in *.
     + apply Map.in_overriding_union. left. exact IHT.
@@ -124,7 +145,14 @@ Lemma term_spec : Reflect Term term. Proof.
     + apply Map.in_overriding_add. left. reflexivity.
     + apply Map.in_overriding_add. right. apply Map.in_overriding_union. left. exact IHT.
     + apply Map.in_overriding_add. right. apply Map.in_overriding_union. right. exact IHT.
-    + apply Map.in_overriding_union. left. apply pattern_spec. exact bound_in_pattern.
+    + apply Map.in_overriding_union. left. apply pattern_iff. exact bound_in_pattern.
     + apply Map.in_overriding_union. right. apply Map.in_overriding_union. left. exact IHT.
     + apply Map.in_overriding_union. right. apply Map.in_overriding_union. right. exact IHT.
+Qed.
+
+Lemma term_spec t s
+  : Reflect.Bool (Term t s) (Map.in_ (term t) s).
+Proof.
+  destruct (Map.in_spec (term t) s); constructor. { apply term_iff. exact Y. }
+  intro C. apply N. apply term_iff. exact C.
 Qed.
