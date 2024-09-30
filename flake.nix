@@ -26,6 +26,14 @@
     in
     {
       lib = {
+        src = nix-filter {
+          root = ./.;
+          include = [
+            "Makefile"
+            "coq.mk"
+            "theories"
+          ];
+        };
         context-with-versions = versions: rec {
           inherit (versions) pkgs;
           coq-pkgs = versions.coq-pkgs or pkgs.coqPackages;
@@ -41,16 +49,9 @@
         coq-with-context =
           context:
           context.coq-pkgs.mkCoqDerivation {
-            pname = "${pname}-coq";
             inherit version;
-            src = nix-filter {
-              root = ./.;
-              include = [
-                "Makefile"
-                "coq.mk"
-                "theories"
-              ];
-            };
+            inherit (self.lib) src;
+            pname = "${pname}-coq";
             propagatedBuildInputs = (with context; [ mmaps ]) ++ (with context.coq-pkgs; [ equations ]);
             installPhase =
               let
@@ -144,66 +145,56 @@
       system:
       let
         pkgs = import nixpkgs { inherit system; };
+        checker =
+          overrides:
+          pkgs.stdenvNoCC.mkDerivation (
+            {
+              inherit (self.lib) src;
+              name = "check";
+              buildPhase = ":";
+              installPhase = "mkdir -p $out";
+              buildInputs = [ ];
+            }
+            // overrides
+          );
+        rg = "${pkgs.ripgrep}/bin/rg";
       in
       {
-        apps =
-          let
-            rg = "${pkgs.ripgrep}/bin/rg";
-          in
-          {
-            syntax-check = {
-              type = "app";
-              program = "${pkgs.writeScriptBin "run" ''
-                #!${pkgs.bash}/bin/bash
-
-                set -eu
-
-                if ${rg} 'Admitted|Axiom|Conjecture|Parameter|Hypothesis|Hypotheses|Variable' -g '*.v' -g '!theories/NewNames.v'; then
-                  echo
-                  echo 'SYNTAX ERROR: unverified assumption (above)'
-                  exit 1
-                fi
-
-                if ${rg} ' $'; then
-                  echo
-                  echo 'SYNTAX ERROR: trailing whitespace (above)'
-                  exit 1
-                fi
-
-                if ${rg} ':$' -g '*.v'; then
-                  echo
-                  echo 'SYNTAX ERROR: colons before types should begin their own lines (above)'
-                  exit 1
-                fi
-
-                echo 'All good!'
-
-              ''}/bin/run";
-            };
-            tests =
-              let
-                tests-to-run = [
-                  "test-coq"
-                  "test_ocaml"
-                ];
-              in
-              {
-                type = "app";
-                program = "${pkgs.writeScriptBin "run" ''
-                  #!${pkgs.bash}/bin/bash
-
-                  set -eu
-
-                  ${pkgs.lib.strings.concatLines (builtins.map (s: "nix build .\\#${s}") tests-to-run)}
-
-                  echo 'All good!'
-
-                ''}/bin/run";
-              };
-          };
         packages = {
           default = self.lib.with-versions { inherit pkgs; };
           coq-only = self.lib.coq-with-versions { inherit pkgs; };
+          syntax-check = checker {
+            buildPhase = ''
+              #!${pkgs.bash}/bin/bash
+
+              set -eu
+
+              if ${rg} 'Admitted|Axiom|Conjecture|Parameter|Hypothesis|Hypotheses|Variable' -g '*.v' -g '!theories/NewNames.v'; then
+                echo
+                echo 'SYNTAX ERROR: unverified assumption (above)'
+                exit 1
+              fi
+
+              if ${rg} ' $'; then
+                echo
+                echo 'SYNTAX ERROR: trailing whitespace (above)'
+                exit 1
+              fi
+
+              if ${rg} ':$' -g '*.v'; then
+                echo
+                echo 'SYNTAX ERROR: colons before types should begin their own lines (above)'
+                exit 1
+              fi
+
+            '';
+          };
+          tests = checker {
+            buildInputs = builtins.map (pkg: self.packages.${system}.${pkg}) [
+              "test-coq"
+              "test_ocaml"
+            ];
+          };
           test-coq =
             let
               pname = "test-coq";

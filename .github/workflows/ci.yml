@@ -41,9 +41,9 @@ jobs:
       run: nix build
 
     - name: Nix tests
-      run: nix run .\#tests
+      run: nix build .\#tests
 
     - name: Syntax check
-      run: nix run .\#syntax-check
+      run: nix build .\#syntax-check
 
     - uses: actions/checkout@v4
