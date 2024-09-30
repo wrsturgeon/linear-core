@@ -62,7 +62,7 @@ Inductive Step (context : Context.context) : Term.term -> Context.context -> Ter
         (* Note that this removes already bound terms, since `UsedIn` won't shadow: *)
         : Map.Reflect (UsedIn.Term (Term.App (Term.Cas pattern body_if_match other_cases) scrutinee)) other_used)
       context_or_used (union_into_context_or_used : Map.Union (Map.domain context) other_used context_or_used)
-      renamed (rename : Unshadow.unshadow context_or_used
+      renamed (rename : Unshadow.unshadow_reserve context_or_used
         (Term.App (Term.Cas pattern body_if_match other_cases) scrutinee) = Some renamed)
       unchanged_context (context_unchanged : Map.Eq context unchanged_context)
       : Step context (Term.App (Term.Cas pattern body_if_match other_cases) scrutinee) unchanged_context renamed
@@ -144,7 +144,7 @@ Proof.
       assert (Ecu : Map.Eq context_or_used context_or_used0). {
         eapply Map.union_det; try eassumption. split; intro F; apply Map.find_domain;
         apply Map.find_domain in F; (eapply Map.in_eq; [| exact F]); [apply Map.eq_sym |]; exact Ec. }
-      destruct (@Unshadow.det _ _ Ecu (Term.App (Term.Cas pattern body_if_match other_cases) scrutinee) _ eq_refl).
+      destruct (@Unshadow.det_reserve _ _ Ecu (Term.App (Term.Cas pattern body_if_match other_cases) scrutinee) _ eq_refl).
       rewrite rename0 in rename. invert rename. reflexivity.
 Qed.
 

@@ -3,6 +3,7 @@ From LinearCore Require
   Halt
   SmallStep
   Term
+  Unshadow
   VerbosePrint
   .
 From LinearCore Require Import

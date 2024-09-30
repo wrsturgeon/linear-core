@@ -52,8 +52,13 @@ Fixpoint unshadow_acc (acc : Map.to String.string) (reserved : Map.set) t :=
       end
   end.
 
-Definition unshadow reserved t := option_map snd $ unshadow_acc (Map.to_self reserved) reserved t.
-Arguments unshadow reserved t/.
+Definition unshadow_reserve reserved t :=
+  let generated := NewNames.generate reserved $ UsedIn.term t in
+  option_map snd $ unshadow_acc generated (Map.set_union reserved $ Map.range generated) t.
+Arguments unshadow_reserve reserved t/.
+
+Definition unshadow := unshadow_reserve Map.empty.
+Arguments unshadow/ t.
 
 
 
@@ -136,16 +141,25 @@ Proof.
   - apply NewNames.one_to_one_generate.
 Qed.
 
-Lemma det
+Lemma det_reserve
   {r1 r2} (Er : Map.Eq r1 r2)
   {t1 t2} (Et : t1 = t2)
-  : unshadow r1 t1 = unshadow r2 t2.
+  : unshadow_reserve r1 t1 = unshadow_reserve r2 t2.
 Proof.
-  eassert (A : Map.Eq (Map.to_self r1) (Map.to_self r2)).
-  - split; intro F; apply Map.to_self_to_self; apply Map.to_self_to_self in F as [I ->];
-    (split; [| reflexivity]); (eapply Map.in_eq; [| exact I]); [apply Map.eq_sym |]; exact Er.
-  - unfold unshadow. destruct (det_acc A Er Et); reflexivity.
+  unfold unshadow_reserve.
+  eassert (E1 : Map.Eq (NewNames.generate r1 $ UsedIn.term t1) (NewNames.generate r2 $ UsedIn.term t2)). {
+    erewrite NewNames.generate_det. { apply Map.eq_refl. } { exact Er. } subst. apply Map.eq_refl. }
+  eassert (E2 : Map.Eq
+    (Map.set_union r1 $ Map.range $ NewNames.generate r1 $ UsedIn.term t1)
+    (Map.set_union r2 $ Map.range $ NewNames.generate r2 $ UsedIn.term t2)). {
+    split; intro F; apply Map.bulk_overwrite_bulk_overwrite;
+    (apply Map.bulk_overwrite_bulk_overwrite in F as [F | [N F]]; [left; apply Er; exact F | right]);
+    (split; [intro I; apply N; eapply Map.in_eq; [| exact I]; try exact Er; apply Map.eq_sym; exact Er |]);
+    apply Map.find_range; apply Map.find_range in F as [j F]; eexists; apply E1; exact F. }
+  destruct (det_acc E1 E2 Et); reflexivity.
 Qed.
+
+
 
 Lemma bindings {acc reserved term bindings renamed}
   (E : unshadow_acc acc reserved term = Some (bindings, renamed))
@@ -493,12 +507,16 @@ Proof.
       eapply bindings. 3: { left. exact Bo. } { exact E2. } exact prev.
 Qed.
 
-Lemma unshadowed {reserved t renamed} (E : unshadow reserved t = Some renamed)
+Lemma unshadowed_reserve {reserved t renamed} (E : unshadow_reserve reserved t = Some renamed)
   : Unshadowed renamed.
 Proof.
   cbn in E. destruct unshadow_acc as [[? ?] |] eqn:Ea; invert E. eapply unshadowed_acc in Ea. { exact Ea. }
-  intros k v F. apply Map.to_self_to_self in F as [I ->]. exact I.
+  intros k v F. apply Map.in_overriding_union. right. rewrite Map.in_range. eexists. exact F.
 Qed.
+
+Lemma unshadowed {t renamed} (E : unshadow t = Some renamed)
+  : Unshadowed renamed.
+Proof. apply unshadowed_reserve in E. exact E. Qed.
 
 
 

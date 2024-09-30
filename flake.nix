@@ -161,8 +161,8 @@
       in
       {
         packages = {
-          default = self.lib.with-versions { inherit pkgs; };
           coq-only = self.lib.coq-with-versions { inherit pkgs; };
+          default = self.lib.with-versions { inherit pkgs; };
           syntax-check = checker {
             buildPhase = ''
               #!${pkgs.bash}/bin/bash
@@ -189,62 +189,120 @@
 
             '';
           };
-          tests = checker {
-            buildInputs = builtins.map (pkg: self.packages.${system}.${pkg}) [
-              "test-coq"
-              "test_ocaml"
-            ];
-          };
           test-coq =
-            let
-              pname = "test-coq";
-              context = self.lib.context-with-versions { inherit pkgs; };
-            in
-            with context;
+            with self.packages.${system}.context;
             coq-pkgs.mkCoqDerivation {
-              inherit pname;
+              pname = "test-coq";
               version = "none";
-              buildInputs = [ (self.lib.coq-with-context context) ];
-              src = pkgs.writeTextFile {
-                name = "${pname}-src";
-                destination = "/theories/Test.v";
-                text = ''
-                  From ${cname} Require Map.
-                '';
-              };
+              buildInputs = [ (self.lib.coq-with-context self.packages.${system}.context) ];
+              src = self.packages.${system}.test-coq-src;
               buildPhase = ''
                 coq_makefile -o Makefile $(find . -name '*.v')
                 make
               '';
             };
-          test_ocaml =
+          test-coq-src = pkgs.writeTextFile {
+            name = "test-coq-src";
+            destination = "/theories/Test.v";
+            text = ''
+              From ${cname} Require Map.
+            '';
+          };
+          test-ocaml =
+            with self.packages.${system}.context;
+            ocaml-pkgs.buildDunePackage {
+              pname = "test_ocaml";
+              version = "none";
+              src = self.packages.${system}.test-ocaml-src;
+              propagatedBuildInputs = [
+                (self.lib.with-context self.packages.${system}.context)
+              ];
+            };
+          context = self.lib.context-with-versions { inherit pkgs; };
+          test-ocaml-src =
             let
               pname = "test_ocaml";
-              context = self.lib.context-with-versions { inherit pkgs; };
             in
-            with context;
-            ocaml-pkgs.buildDunePackage {
-              inherit pname;
-              version = "none";
-              propagatedBuildInputs = [
-                (self.lib.with-context context)
-              ];
-              src = pkgs.stdenvNoCC.mkDerivation {
-                name = "${pname}-src";
-                src = nix-filter {
-                  root = ./.;
-                  include = [ ];
-                };
-                buildInputs = [ pkgs.tree ] ++ (with context; [ dune ]);
-                buildPhase = ''
-                  dune init proj ${pname} ./${pname}
-                  tree -a
-                  sed -i 's/libraries/libraries linear_core/g' ${pname}/bin/dune
-                  sed -i '1s/^/open Linear_core\n/' ${pname}/bin/main.ml
-                '';
-                installPhase = "cp -Lr ./${pname} $out";
+            pkgs.stdenvNoCC.mkDerivation {
+              name = "test-ocaml-src";
+              src = nix-filter {
+                root = ./.;
+                include = [ ];
               };
+              buildInputs = with self.packages.${system}.context; [ dune ];
+              buildPhase = ''
+                dune init proj ${pname} ./${pname}
+                sed -i 's/libraries/libraries linear_core/g' ${pname}/bin/dune
+                sed -i '1s/^/open Linear_core\n/' ${pname}/bin/main.ml
+              '';
+              installPhase = "cp -Lr ./${pname} $out";
             };
+          test-unshadow =
+            with self.packages.${system}.context;
+            ocaml-pkgs.buildDunePackage {
+              pname = "test_unshadow";
+              version = "none";
+              src = self.packages.${system}.test-unshadow-src;
+              propagatedBuildInputs = [ (self.lib.with-context self.packages.${system}.context) ];
+            };
+          test-unshadow-src =
+            let
+              main-ml = ''
+                open Linear_core
+
+                let () =
+                  let err = Linear_core.Term.Ctr (Linear_core.Constructor.Builtin Linear_core.Constructor.Error) in
+                  let term =
+                    Linear_core.Term.App (
+                      Linear_core.Term.Cas (
+                        Linear_core.Pattern.Nam "x",
+                        Linear_core.Term.Mov "x",
+                        Linear_core.Term.Cas (
+                          Linear_core.Pattern.Nam "x",
+                          Linear_core.Term.Mov "x",
+                          Linear_core.Term.Mov "x")),
+                      Linear_core.Term.App (
+                        Linear_core.Term.Cas (
+                          Linear_core.Pattern.Nam "x",
+                          err,
+                          err),
+                        err)) in
+                  let stringified = Linear_core.Term.to_string term in
+                  print_endline "Original term:";
+                  print_endline stringified;
+                  print_endline "";
+                  match Linear_core.Unshadow.unshadow term with
+                  | None ->
+                      print_endline "ERROR: FAILED TO UNSHADOW";
+                      exit 1
+                  | Some unshadowed ->
+                      let stringified_unshadowed = Linear_core.Term.to_string unshadowed in
+                      print_endline "Unshadowed:";
+                      print_endline stringified_unshadowed
+              '';
+              uname = "test_unshadow";
+            in
+            pkgs.stdenvNoCC.mkDerivation {
+              name = "test-unshadow-src";
+              src = nix-filter {
+                root = ./.;
+                include = [ ];
+              };
+              buildInputs = with self.packages.${system}.context; [ dune ];
+              buildPhase = ''
+                dune init proj ${uname} ./${uname}
+                sed -i 's/libraries/libraries linear_core/g' ${uname}/bin/dune
+                echo ${pkgs.lib.strings.escapeShellArg main-ml} > ${uname}/bin/main.ml
+              '';
+              installPhase = "cp -Lr ./${uname} $out";
+            };
+          tests = checker {
+            buildInputs = builtins.map (pkg: self.packages.${system}.${pkg}) (
+              builtins.filter (name: name != "tests" && pkgs.lib.strings.hasPrefix "test" name) (
+                builtins.attrNames self.packages.${system}
+              )
+            );
+          };
         };
         devShells.default = self.lib.shell-with-versions { inherit pkgs; };
       }

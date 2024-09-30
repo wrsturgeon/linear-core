@@ -3,7 +3,7 @@ Require Import
   ExtrOcamlNativeString
   .
 From LinearCore Require
-  SmallStepFunction
+  Unshadow
   .
 
 Set Extraction Optimize.
@@ -17,4 +17,4 @@ Extraction Blacklist String List.
 Extract Inductive sigT => "( * )" [ "(, )" ].
 
 Set Extraction Output Directory "ocaml/lib".
-Recursive Extraction Library SmallStepFunction.
+Recursive Extraction Library Unshadow.
