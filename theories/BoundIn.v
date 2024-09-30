@@ -117,7 +117,7 @@ Inductive Term : Term.term -> String.string -> Prop :=
       : Term (Term.Cas pattern body_if_match other_cases) name
   | TCaB body_if_match name (bound_in_body : Term body_if_match name) pattern other_cases
       : Term (Term.Cas pattern body_if_match other_cases) name
-  | TCaO other_cases name (bound_in_other_cases : Term other_cases name) pattern body_if_match
+  | TCaO other_cases name (bound_in_another_case : Term other_cases name) pattern body_if_match
       : Term (Term.Cas pattern body_if_match other_cases) name
   .
 Arguments Term term name.

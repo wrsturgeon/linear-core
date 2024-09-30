@@ -3,6 +3,7 @@ From LinearCore Require
   Pattern
   .
 From LinearCore Require Import
+  DollarSign
   Invert
   .
 
@@ -105,4 +106,49 @@ Proof.
   unfold pattern. destruct patt. { constructor. constructor. }
   destruct (move_or_reference_spec move_or_reference0); constructor. { constructor. exact Y. }
   intro P. apply N. invert P. assumption.
+Qed.
+
+
+
+Inductive AllPatternsIn : Term.term -> Prop :=
+  | APCtr ctor
+      : AllPatternsIn (Term.Ctr ctor)
+  | APMov name
+      : AllPatternsIn (Term.Mov name)
+  | APRef name
+      : AllPatternsIn (Term.Ref name)
+  | APApp {function} (APf : AllPatternsIn function) {argument} (APa : AllPatternsIn argument)
+      : AllPatternsIn (Term.App function argument)
+  | APFor {type} (APt : AllPatternsIn type) {body} (APb : AllPatternsIn body) variable
+      : AllPatternsIn (Term.For variable type body)
+  | APCas {pattern} (WFp : Pattern pattern) {body_if_match} (APb : AllPatternsIn body_if_match)
+      {other_cases} (APo : AllPatternsIn other_cases)
+      : AllPatternsIn (Term.Cas pattern body_if_match other_cases)
+  .
+Arguments AllPatternsIn t.
+
+Fixpoint all_patterns_in t :=
+  match t with
+  | Term.Ctr _
+  | Term.Mov _
+  | Term.Ref _ =>
+      true
+  | Term.App t1 t2
+  | Term.For _ t1 t2 =>
+      andb (all_patterns_in t1) (all_patterns_in t2)
+  | Term.Cas p body_if_match other_cases =>
+      andb (pattern p) $ andb (all_patterns_in body_if_match) (all_patterns_in other_cases)
+  end.
+
+Lemma all_patterns_in_spec t
+  : Reflect.Bool (AllPatternsIn t) (all_patterns_in t).
+Proof.
+  induction t; cbn in *; repeat constructor.
+  - destruct IHt1. 2: { constructor. intro C. invert C. apply N in APf as []. }
+    destruct IHt2; constructor. { constructor; assumption. } intro C. invert C. apply N in APa as [].
+  - destruct IHt1. 2: { constructor. intro C. invert C. apply N in APt as []. }
+    destruct IHt2; constructor. { constructor; assumption. } intro C. invert C. apply N in APb as [].
+  - destruct (pattern_spec pattern0). 2: { constructor. intro C. invert C. apply N in WFp as []. }
+    destruct IHt1. 2: { constructor. intro C. invert C. apply N in APb as []. }
+    destruct IHt2; constructor. { constructor; assumption. } intro C. invert C. apply N in APo as [].
 Qed.

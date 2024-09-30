@@ -8,7 +8,7 @@ From LinearCore Require Import
 
 
 
-(* TODO: make `Err`, `Typ`, & `Prp` constructors? *)
+(* TODO: unify `Mov` and `Ref` with a boolean ownership flag *)
 Inductive term : Set :=
   | Ctr (constructor : Constructor.constructor)
   | Mov (name : String.string)
