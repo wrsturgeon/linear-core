@@ -52,8 +52,8 @@ Definition map3 {A B X Y} (f : X -> Y) (tuple : A * B * X) : A * B * Y :=
 Fixpoint unshadow_acc (acc : Map.to String.string) (reserved : Map.set) t :=
   match t with
   | Term.Ctr ctor => Some (acc, reserved, Term.Ctr ctor)
-  | Term.Mov k => Some $ map3 Term.Mov (get_or_add acc reserved k)
-  | Term.Ref k => Some $ map3 Term.Ref (get_or_add acc reserved k)
+  | Term.Mov k => Some $ map3 Term.Mov $ get_or_add acc reserved k
+  | Term.Ref k => Some $ map3 Term.Ref $ get_or_add acc reserved k
   | Term.App f a =>
       match unshadow_acc acc reserved f with None => None | Some (acc, reserved, f') =>
         match unshadow_acc acc reserved a with None => None | Some (acc, reserved, a') =>
@@ -295,23 +295,38 @@ Proof.
         right. right. right. apply E1. right. left. exact bound_in_type.
       * right. right. right. apply E1. right. right. exact I.
   - rewrite unshadow_acc_cas in E. destruct unshadow_acc as [[[a1 r1] t1] |] eqn:E1 in E. 2: { discriminate E. }
-    destruct Rename.pattern eqn:ER in E. 2: { discriminate E. }
+    eassert (O2O : _); [| destruct (@Rename.pattern_spec (NewNames.generate r1 (BoundIn.pattern pattern))
+      O2O pattern) as [renamed_pattern RP | NR]; [| discriminate E]]. { apply NewNames.one_to_one_generate. }
     destruct unshadow_acc as [[[a2 r2] t2] |] eqn:E2 in E; invert E. assert (R1 := range E1 prev).
     eapply IHterm2 in E1; try eassumption. eapply IHterm1 in E2; try eassumption. 2: { intros. apply Map.in_overriding_union.
       apply Map.bulk_overwrite_bulk_overwrite in Fa as [Fa | [Na Fa]]. 2: { right. eapply R1. exact Fa. }
       left. apply Map.in_range. eexists. exact Fa. }
     split.
-    + intro I. destruct (BoundIn.pattern_spec p x). { right. left. apply BoundIn.TCaP. exact Y. }
+    + (* If `x` is in the second output of the `unshadow` function (`used`), then
+       * it's either used in the renamed term, bound in it, or an extra in the original `reserved`: *)
+      intro I. destruct (BoundIn.pattern_spec renamed_pattern x). { right. left. apply BoundIn.TCaP. exact Y. }
+      (* Use the inductive hypothesis from recursing down the body of the case expression: *)
       apply E2 in I as [U | [B | I]]. { left. apply UsedIn.CaB; assumption. } { right. left. apply BoundIn.TCaB. exact B. }
-      apply Map.in_overriding_union in I as [I | I].
-      * apply Map.in_range in I as [z F]. Abort. (*
-      * apply E1 in I as [U | [B | I]].
-      apply E1 in I as [U | [B | I]]. { left. apply UsedIn.FoT. exact U. } { right. left. apply BoundIn.TFoT. exact B. }
-      right. right. exact I.
-    + intro UBI. apply E2. rewrite Map.in_overriding_add. destruct UBI as [U | [B | I]].
-      * invert U. 2: { left. exact used_in_body. } right. right. right. apply E1. left. exact used_in_type.
-      * invert B. { right. right. left. reflexivity. } 2: { right. left. exact bound_in_body. }
-        right. right. right. apply E1. right. left. exact bound_in_type.
+      (* Most of those were easy, but the one in which `x` was an extra in `reserved` is more tricky, since
+       * either `x` was bound in `pattern` (i.e. the case pattern to match against) and renamed,
+       * or `x` was an extra in the _body_'s (temporary) reserved set: *)
+      apply Map.in_overriding_union in I as [I | I]. {
+        (* `x` was bound in `pattern` (i.e. the case pattern to match against) and renamed,
+         * but we know that `x` wasn't bound in the renamed `pattern`: *)
+        apply Map.in_range in I as [z F]. contradiction N. eapply Rename.bound_in_pattern. { eassumption. }
+        eexists. split. 2: { exact F. } apply BoundIn.pattern_iff. eapply NewNames.in_generate. eexists. exact F. }
+      apply E1 in I as [U | [B | I]].
+      * left. apply UsedIn.CaO. exact U.
+      * right. left. apply BoundIn.TCaO. exact B.
+      * right. right. exact I.
+    + intro UBI. apply E2. unfold Map.set_union. rewrite Map.in_overriding_union.
+      rewrite Map.in_range. destruct UBI as [U | [B | I]].
+      * invert U. { left. exact used_in_body. } right. right. right. apply E1. left. exact used_in_another_case.
+      * invert B.
+        -- right. right. left. eapply Rename.bound_in_pattern in bound_in_pattern as [z [B F]]. 2: { eassumption. }
+           eexists. exact F.
+        -- right. left. exact bound_in_body.
+        -- right. right. right. apply E1. right. left. exact bound_in_other_cases.
       * right. right. right. apply E1. right. right. exact I.
 Qed.
 
@@ -330,4 +345,30 @@ Inductive Unshadowed : Term.term -> Prop :=
       (disj_f_a : forall x (Bf : BoundIn.Term function x) (Ua : UsedIn.Term argument x), False)
       (disj_a_f : forall x (Ba : BoundIn.Term argument x) (Uf : UsedIn.Term function x), False)
       : Unshadowed (Term.App function argument)
-  . *)
+  .
+
+Lemma unshadowed_acc {acc reserved t acc' reserved' renamed}
+  (E : unshadow_acc acc reserved t = Some (acc', reserved', renamed))
+  (prev : forall x y (Fa : Map.Find acc x y), Map.In reserved y)
+  : Unshadowed renamed.
+Proof.
+  (*assert (R := range E prev). assert (U := used E prev).*)
+  generalize dependent renamed. generalize dependent reserved'. generalize dependent acc'.
+  generalize dependent reserved. generalize dependent acc. induction t; intros.
+  - cbn in E. invert E. constructor.
+  - cbn in E. destruct (Map.find_spec acc name); cbn in E; invert E; constructor.
+  - cbn in E. destruct (Map.find_spec acc name); cbn in E; invert E; constructor.
+  - cbn in E. destruct (unshadow_acc acc reserved t1) as [[[acc1 reserved1] renamed1] |] eqn:E1. 2: { discriminate E. }
+    destruct (unshadow_acc acc1 reserved1 t2) as [[[acc2 reserved2] renamed2] |] eqn:E2; invert E.
+    specialize (IHt1 _ _ prev _ _ _ E1). eassert (prev1 : _); [| specialize (IHt2 _ _ prev1 _ _ _ E2)]. {
+      intros. eapply range. { eassumption. } { exact prev. } exact Fa. }
+    constructor; try assumption; intros. Abort.
+
+
+
+(* sanity check that no information is destroyed: *)
+(*
+Fixpoint without_scope := ...
+Lemma invert := (E : unshadow s t = Some t')
+  : without_scope (Map.invert s) t' = t.
+*)

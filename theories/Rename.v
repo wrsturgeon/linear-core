@@ -6,6 +6,7 @@ From LinearCore Require
   WellFormed
   .
 From LinearCore Require Import
+  DollarSign
   Invert
   .
 
@@ -128,6 +129,21 @@ Proof. { split; intro S.
   - eapply Map.one_to_one_remove_if_present. 2: { apply Map.remove_if_present_remove. } exact O2O0.
 Qed.
 
+Lemma bound_in_strict {lookup} {O2O : Map.OneToOne lookup}
+  {strict renamed_strict} (R : Strict O2O strict renamed_strict) y
+  : BoundIn.Strict renamed_strict y <-> exists x, (BoundIn.Strict strict x /\ Map.Find lookup x y).
+Proof.
+  generalize dependent y. induction R; intros. { split. { intro B. invert B. } intros [x [B F]]. invert B. } split.
+  - intro B. invert B.
+    + destruct rename_argument as [F RIP]. eexists. split. { left. } exact F.
+    + apply IHR in bound_earlier as [x [B F]]. eexists. split. { right. exact B. }
+      apply rename_argument in F as [N F]. exact F.
+  - intros [x [B F]]. destruct rename_argument as [Fu Ru].
+    destruct (String.eqb_spec x argument). { subst. destruct (Map.find_det Fu F). left. }
+    invert B. { contradiction n. reflexivity. } right. apply IHR. eexists.
+    split. { exact bound_earlier. } apply Ru. split. { exact n. } exact F.
+Qed.
+
 
 
 Variant MoveOrReference {lookup} (O2O : Map.OneToOne lookup) : Pattern.move_or_reference -> Pattern.move_or_reference -> Prop :=
@@ -189,6 +205,16 @@ Lemma move_or_reference_reversible {lookup} (O2O : Map.OneToOne lookup) {inverte
   (O2OI : Map.OneToOne inverted) move_or_reference renamed_move_or_reference
   : MoveOrReference O2O move_or_reference renamed_move_or_reference <-> MoveOrReference O2OI renamed_move_or_reference move_or_reference.
 Proof. split; intro MR; invert MR; constructor; eapply strict_reversible; try eassumption; apply Map.invert_sym; assumption. Qed.
+
+Lemma bound_in_move_or_reference {lookup} {O2O : Map.OneToOne lookup}
+  {move_or_reference renamed_move_or_reference} (R : MoveOrReference O2O move_or_reference renamed_move_or_reference) y
+  : BoundIn.MoveOrReference renamed_move_or_reference y <-> exists x, (BoundIn.MoveOrReference move_or_reference x /\ Map.Find lookup x y).
+Proof.
+  split.
+  - intro B. invert B; invert R; (eapply bound_in_strict in bound_in_strict0 as [x [B F]]; [| eassumption]);
+    eexists; (split; [| exact F]); constructor; exact B.
+  - intros [x [B F]]. invert B; invert R; constructor; (eapply bound_in_strict; [eassumption |]); eexists; split; eassumption.
+Qed.
 
 
 
@@ -277,4 +303,18 @@ Proof.
     constructor. eapply move_or_reference_reversible. { apply Map.invert_sym. eassumption. } eassumption.
   - generalize dependent lookup. induction P; intros. { constructor. apply inv. exact rename_name. }
     constructor. eapply move_or_reference_reversible; eassumption.
+Qed.
+
+Lemma bound_in_pattern {lookup} {O2O : Map.OneToOne lookup}
+  {pattern renamed_pattern} (R : Pattern O2O pattern renamed_pattern) y
+  : BoundIn.Pattern renamed_pattern y <-> exists x, (BoundIn.Pattern pattern x /\ Map.Find lookup x y).
+Proof.
+  invert R.
+  + split. { intro B. invert B. eexists. split. { constructor. } exact rename_name. }
+    intros [x [B F]]. invert B. destruct (Map.find_det rename_name F). constructor.
+  + split.
+    * intro B. invert B. eapply bound_in_move_or_reference in bound_in_move_or_reference0 as [x [B F]]. 2: { eassumption. }
+      eexists. split. { constructor. exact B. } exact F.
+    * intros [x [B F]]. invert B. constructor. eapply bound_in_move_or_reference. { eassumption. }
+      eexists. split; eassumption.
 Qed.
