@@ -700,6 +700,10 @@ Proof.
     + eapply Y4. { apply BoundIn.pattern_iff. exact Bp. } apply Bo. exact Bo0.
 Qed.
 
+Lemma unshadowed_iff t
+  : Unshadowed t <-> unshadowed t = true.
+Proof. exact (Reflect.bool_iff (unshadowed_spec _)). Qed.
+
 
 
 (* sanity check that no information is destroyed: *)

@@ -557,6 +557,10 @@ Proof.
       intros k I B; (eapply F; [exact I |]); apply BoundIn.strict_iff; exact B.
 Qed.
 
+Lemma compatible_iff context pattern
+  : Compatible context pattern <-> compatible context pattern = true.
+Proof. exact (Reflect.bool_iff (compatible_spec _ _)). Qed.
+
 
 
 Lemma unshadow_strict {scrutinee} (Ut : Unshadow.Unshadowed scrutinee)

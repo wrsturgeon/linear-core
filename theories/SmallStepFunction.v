@@ -25,7 +25,6 @@ Definition to_string (h : Halt.halt (Context.context * Term.term)) : string :=
  * consider keeping a running tally of all bound and used terms, then
  * incrementally updating it with each step, to cache most of the work. *)
 
-(*
 Fixpoint step (fuel : Fuel.fuel) (context : Context.context) (term : Term.term) : Halt.halt (Context.context * Term.term) :=
   VerbosePrint.format to_string $
   match fuel with Fuel.Stop => Halt.OutOfFuel | Fuel.Continue fuel =>
@@ -47,113 +46,16 @@ Fixpoint step (fuel : Fuel.fuel) (context : Context.context) (term : Term.term) 
           end
         end
     | Term.App (Term.Cas pattern body_if_match other_cases) scrutinee =>
-        let used_in_scrutinee := UsedIn.term scrutinee in
-        let bound_in_pattern := BoundIn.pattern pattern in
-        if andb (Match.compatible context pattern) (Map.disjoint used_in_scrutinee bound_in_pattern) then
-          Halt.Exit
+        if andb (Match.compatible context pattern) (Unshadow.unshadowed term) then
+          Halt.Exit (* TODO *)
         else
-          let other_used := UsedIn.term (Term.App (Term.Cas pattern body_if_match other_cases) scrutinee) in
-          let reserved := Map.overriding_union (Map.domain context) other_used in
-          let new_names := NewNames.generate reserved (BoundIn.pattern pattern) in
-          match Rename.pattern new_names pattern with None => Halt.Exit | Some renamed_pattern =>
-            let map_body_if_match := Map.bulk_overwrite new_names (Map.to_self (UsedIn.term body_if_match)) in
-            match Rename.term map_body_if_match body_if_match with None => Halt.Exit | Some renamed_body_if_match =>
-              let map_other_cases := Map.bulk_overwrite new_names (Map.to_self (UsedIn.term other_cases)) in
-              match Rename.term map_other_cases other_cases with None => Halt.Exit | Some renamed_other_cases =>
-                Halt.Return (context,
-                  Term.App (Term.Cas renamed_pattern renamed_body_if_match renamed_other_cases) scrutinee)
-              end
-            end
+          match Unshadow.unshadow_reserve (Map.domain context) term with
+          | None => Halt.Exit
+          | Some renamed => Halt.Return (context, renamed)
           end
     | _ => Halt.Exit
     end
   end.
-
-
-
-(*Instance well_founded_cardinality :*)
-(*  Classes.WellFounded (Telescopes.tele_measure*)
-(*    (Telescopes.ext Context.context (fun _ : Context.context => Telescopes.tip Term.term))*)
-(*    nat*)
-(*    (fun (context : Context.context) (_ : Term.term) => Map.cardinality context)*)
-(*    lt).*)
-(*Proof. apply Telescopes.wf_tele_measure. exact Subterm.lt_wf. Qed.*)
-(**)
-(**)
-(**)
-(*Equations step (context : Context.context) (term : Term.term)*)
-(*  : option (Context.context * Term.term) by wf (Map.cardinality context) lt :=*)
-(*  step context (Term.Mov name) := Map.pop context name;*)
-(*  step context (Term.Ref self) with Map.found_dec context self => {*)
-(*    | Map.NotFound => None;*)
-(*    | @Map.Found looked_up _ =>*)
-(*        let context_without_self := Map.remove self context in*)
-(*        match step context_without_self looked_up with*)
-(*        | None => None*)
-(*        | Some (updated_context_without_self, stepped) =>*)
-(*          match Map.find updated_context_without_self self with Some _ => None | None =>*)
-(*            Some (Map.overriding_add self stepped updated_context_without_self, Term.Ref self)*)
-(*          end*)
-(*        end*)
-(*  };*)
-(*  step _ _ := None.*)
-(*Next Obligation.*)
-(*  rewrite Map.cardinality_remove. apply Map.find_iff in Y as E. rewrite E.*)
-(*  apply PeanoNat.Nat.lt_pred_l. apply MapCore.bindings_spec1 in Y.*)
-(*  unfold Map.cardinality. rewrite MapCore.cardinal_spec. intro D.*)
-(*  destruct (MapCore.bindings context). { invert Y. } discriminate D.*)
-(*Qed.*)
-(*Fail Next Obligation.*)
-
-
-
-(*Program Fixpoint step (context : Context.context) {measure (Map.cardinality context)}*)
-(*  : Term.term -> option (Context.context * Term.term) := fun term =>*)
-(*    match term with*)
-(*    | Term.Mov name =>*)
-(*        option_map (fun updated_term => (Map.remove name context, updated_term)) (Map.find context name)*)
-(*    | Term.Ref self =>*)
-(*        match Map.find context self with None => None | Some looked_up =>*)
-(*          let context_without_self := Map.remove self context in*)
-(*          match step context_without_self looked_up with*)
-(*          | None => None*)
-(*          | Some (updated_context_without_self, stepped) =>*)
-(*            match Map.find updated_context_without_self self with Some _ => None | None =>*)
-(*              Some (Map.overriding_add self stepped updated_context_without_self, Term.Ref self)*)
-(*            end*)
-(*          end*)
-(*        end*)
-(*    | _ => None*)
-(*    end.*)
-(*Next Obligation.*)
-(*  rewrite Map.cardinality_remove. rewrite <- Heq_anonymous. apply PeanoNat.Nat.lt_pred_l.*)
-(*  symmetry in Heq_anonymous. apply Map.find_iff in Heq_anonymous. apply MapCore.bindings_spec1 in Heq_anonymous.*)
-(*  unfold Map.cardinality. rewrite MapCore.cardinal_spec. intro D.*)
-(*  destruct (MapCore.bindings context). { invert Heq_anonymous. } discriminate D.*)
-(*Qed.*)
-(*Next Obligation. split; intros self D; discriminate D. Qed.*)
-(*Next Obligation. split; intros self D; discriminate D. Qed.*)
-(*Next Obligation. split; intros self D; discriminate D. Qed.*)
-(*Next Obligation. split; intros self D; discriminate D. Qed.*)
-(*Next Obligation. split; intros self D; discriminate D. Qed.*)
-(*Next Obligation. split; intros self D; discriminate D. Qed.*)
-(*Next Obligation. split; intros self D; discriminate D. Qed.*)
-(*Fail Next Obligation.*)
-
-
-
-Lemma compatible_andb context pattern term2
-  (E : (Match.compatible context pattern && Map.disjoint (UsedIn.term term2) (BoundIn.pattern pattern))%bool = false)
-  (compatible_names : Match.Compatible context pattern)
-  (safe_names : forall x (U : UsedIn.Term term2 x) (B : BoundIn.Pattern pattern x), False)
-  : False.
-Proof.
-  apply Bool.andb_false_iff in E as [E | E].
-  - destruct (Match.compatible_spec context pattern). { discriminate E. } apply N in compatible_names as [].
-  - destruct (Map.disjoint_spec (UsedIn.term term2) (BoundIn.pattern pattern)). { discriminate E. }
-    apply N; clear N. intros k U B. eapply safe_names. { apply UsedIn.term_spec. exact U. }
-    apply BoundIn.pattern_spec. exact B.
-Qed.
 
 
 
@@ -186,87 +88,19 @@ Proof.
     cbn. econstructor. { exact Y. } { apply Map.remove_remove. eexists. exact Y. } { exact Y0. }
     + intros [y F]. apply N in F as [].
     + apply Map.add_overriding. intros v F. apply N in F as [].
-  - unfold step. destruct term1 as [| | | | | pattern body_if_match other_cases];
-    try solve [constructor; intros [m t] C; invert C]. destruct andb eqn:E.
-    + admit.
-    + edestruct (@Rename.pattern_spec (NewNames.generate (Map.overriding_union (Map.domain context)
-          (UsedIn.term (Term.App (Term.Cas pattern body_if_match other_cases) term2)))
-        (BoundIn.pattern pattern)) (NewNames.one_to_one_generate _ _) pattern).
-      * destruct (@Rename.term_spec (Map.bulk_overwrite (NewNames.generate
-          (Map.overriding_union (Map.domain context) (UsedIn.term (Term.App (Term.Cas pattern body_if_match other_cases) term2)))
-          (BoundIn.pattern pattern)) (Map.to_self (UsedIn.term body_if_match))) body_if_match).
-        -- split; [| split]; intros.
-           ++ eapply Map.one_to_one_bulk_overwrite. { apply Map.bulk_overwrite_bulk_overwrite. }
-              split. { apply NewNames.one_to_one_generate. } split; intros. {
-                apply Map.to_self_to_self in F1 as [I1 ->]. apply Map.to_self_to_self in F2 as [I2 ->]. reflexivity. }
-              apply Map.to_self_to_self in Fo as [Io ->].
-Abort. (*
-
-
-
-        2: {
-          constructor. intros [m t] C; simpl fst in *; simpl snd in *. invert C; try solve [eapply compatible_andb; eassumption].
-          eapply N. eapply Rename.term_eq; try reflexivity. { exact rename_body_if_match. } clear rename_body_if_match.
-          intros k v. unfold Map.BulkOverwrite in overwrite_body_if_match.
-          rewrite overwrite_body_if_match; clear overwrite_body_if_match.
-          assert (BO := @Map.bulk_overwrite_bulk_overwrite). unfold Map.BulkOverwrite in BO. rewrite BO; clear BO.
-          erewrite NewNames.generate_det. { reflexivity. } 2: { apply Map.eq_refl. }
-          intros k' []. unfold Map.Union in union_into_reserved. rewrite union_into_reserved.
-          repeat rewrite Map.find_iff. rewrite Map.find_overriding_union. split.
-          * intros [E' | E']. { rewrite E'. reflexivity. }
-            destruct (Map.find_spec (Map.domain context) k') as [[] |]. { reflexivity. }
-            eassert (I : Map.In _ _). { eexists. apply Map.find_iff. exact E'. } apply all_other_used_names in I.
-            apply UsedIn.term_spec in I as [[] F]. apply Map.find_iff. exact F.
-          * intro E'. destruct (Map.find_spec (Map.domain context) k') as [[] F | N']; [left | right]. { reflexivity. }
-            eassert (I : Map.In _ _). { eexists. apply Map.find_iff. exact E'. }
-            apply UsedIn.term_spec in I. apply all_other_used_names in I as [[] F]. apply Map.find_iff. exact F. }
-        destruct (Rename.term_spec (Map.bulk_overwrite (NewNames.generate
-          (Map.overriding_union (Map.domain context) (UsedIn.term (Term.App (Term.Cas pattern body_if_match other_cases) term2)))
-          (BoundIn.pattern pattern)) (Map.to_self (UsedIn.term other_cases))) other_cases). 2: {
-          constructor. intros [m t] C; simpl fst in *; simpl snd in *. invert C; try solve [eapply compatible_andb; eassumption].
-          eapply N. eapply Rename.term_eq; try reflexivity. { exact rename_other_cases. } clear rename_other_cases.
-          intros k v. unfold Map.BulkOverwrite in overwrite_other_cases.
-          rewrite overwrite_other_cases; clear overwrite_other_cases.
-          assert (BO := @Map.bulk_overwrite_bulk_overwrite). unfold Map.BulkOverwrite in BO. rewrite BO; clear BO.
-          erewrite NewNames.generate_det. { reflexivity. } 2: { apply Map.eq_refl. }
-          intros k' []. unfold Map.Union in union_into_reserved. rewrite union_into_reserved.
-          repeat rewrite Map.find_iff. rewrite Map.find_overriding_union. split.
-          * intros [E' | E']. { rewrite E'. reflexivity. }
-            destruct (Map.find_spec (Map.domain context) k') as [[] |]. { reflexivity. }
-            eassert (I : Map.In _ _). { eexists. apply Map.find_iff. exact E'. } apply all_other_used_names in I.
-            apply UsedIn.term_spec in I as [[] F]. apply Map.find_iff. exact F.
-          * intro E'. destruct (Map.find_spec (Map.domain context) k') as [[] F | N']; [left | right]. { reflexivity. }
-            eassert (I : Map.In _ _). { eexists. apply Map.find_iff. exact E'. }
-            apply UsedIn.term_spec in I. apply all_other_used_names in I as [[] F]. apply Map.find_iff. exact F. }
-        constructor; simpl fst in *; simpl snd in *. eapply SmallStep.ApR; try eassumption.
-        + apply Bool.andb_false_iff in E as [E | E]; [left | right].
-          * intro C. destruct (Match.compatible_spec context pattern). { discriminate E. } apply N in C as [].
-          * destruct (Map.disjoint_spec (UsedIn.term term2) (BoundIn.pattern pattern)). { discriminate E. }
-            apply Map.not_disjoint_exists in N as [k [Iu Ib]]. exists k.
-            split. { apply UsedIn.term_spec. exact Iu. } apply BoundIn.pattern_spec. exact Ib.
-        + apply UsedIn.term_spec.
-        + apply Map.union_overriding. intros k [] F [] F'. reflexivity.
-        + reflexivity.
-        + apply Map.bulk_overwrite_bulk_overwrite.
-        + apply Map.bulk_overwrite_bulk_overwrite.
-        + apply Map.eq_refl. }
-      * constructor. intros [m t] C; simpl fst in *; simpl snd in *. invert C; try solve [eapply compatible_andb; eassumption].
-        eapply N. eapply Rename.pattern_eq; try reflexivity. { exact rename_pattern. }
-        erewrite NewNames.generate_det. { apply Map.eq_refl. } 2: { apply Map.eq_refl. }
-        intros k []. rewrite (Map.find_iff (Map.overriding_union _ _)). rewrite Map.find_overriding_union.
-        unfold Map.Union in union_into_reserved. rewrite union_into_reserved.
-        destruct (Map.find_spec (Map.domain context) k) as [[] M | N']. { split. { reflexivity. } left. exact M. }
-        assert (A : Map.Find other_used k tt <-> UsedIn.Term (Term.App (Term.Cas pattern body_if_match other_cases) term2) k). {
-          cbn in all_other_used_names. rewrite <- all_other_used_names.
-          split; [intro F; eexists | intros [[] F]]; exact F. }
-        rewrite A. clear A. rewrite <- Map.find_iff. assert (A
-          : Map.Find (UsedIn.term (Term.App (Term.Cas pattern body_if_match other_cases) term2)) k tt <->
-            UsedIn.Term (Term.App (Term.Cas pattern body_if_match other_cases) term2) k). {
-          rewrite <- (UsedIn.term_spec (Term.App (Term.Cas pattern body_if_match other_cases) term2) k).
-          split; [intro F; eexists | intros [[] F]]; exact F. } rewrite A. clear A.
-        split. { intros [F | F]. { apply N' in F as []. } exact F. } intro F. right. exact F.
-      apply Bool.andb_true_iff in E as [Ec Ed]. destruct (Match.compatible_spec context pattern) as [CP |]; invert Ec.
-      destruct (Map.disjoint_spec (UsedIn.term term2) (BoundIn.pattern pattern)) as [D |]; invert Ed.
-Abort. (* TODO *)
-*)
-*)
+  - unfold step. unfold VerbosePrint.format. unfold VerbosePrint.print.
+    destruct term1 as [| | | | | pattern body_if_match other_cases];
+    try solve [constructor; intros [m t] C; invert C]. destruct andb eqn:E. 2: {
+      apply Bool.andb_false_iff in E. destruct Unshadow.unshadow_reserve eqn:Eu; constructor.
+      * cbn. eapply SmallStep.ApR. 3: { exact Eu. } 2: { apply Map.domain_domain. } 2: { apply Map.eq_refl. }
+        destruct E as [E | E]; [left | right]; intro C.
+        -- apply Match.compatible_iff in C. rewrite E in C. discriminate C.
+        -- apply Unshadow.unshadowed_iff in C. rewrite E in C. discriminate C.
+      * intros [c' t'] C. simpl fst in *. simpl snd in *. invert C; try solve [destruct E as [E | E]; [
+          apply Match.compatible_iff in compatible_names; rewrite E in compatible_names; discriminate compatible_names |
+          apply Unshadow.unshadowed_iff in unshadowed; rewrite E in unshadowed; discriminate unshadowed]].
+        assert (Ed : Map.Eq (Map.domain context) context_domain). {
+          eapply Map.domain_det. { apply Map.domain_domain. } 2: { exact D. } apply Map.eq_refl. }
+        destruct (Unshadow.det_reserve Ed (@eq_refl _ $ Term.App (Term.Cas pattern body_if_match other_cases) term2)).
+        rewrite Eu in rename. discriminate rename. }
+Abort.
