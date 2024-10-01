@@ -4,6 +4,7 @@ From LinearCore Require
   Map
   Pattern
   Term
+  Unshadow
   WellFormed
   .
 From LinearCore Require Import
@@ -259,6 +260,12 @@ Proof.
     invert WF. eapply IHS. { exact curried_well_formed. } { exact I. } exact bound_earlier.
   Unshelve. repeat constructor.
 Qed.
+
+Lemma not_bound_in_cleaved {context strict scrutinee cleaved context_with_matches}
+  (S : StrictRef context strict scrutinee cleaved context_with_matches)
+  {x} (B : BoundIn.Term cleaved x)
+  : False.
+Proof. induction S. { invert B. } invert B. { apply IHS in bound_in_function as []. } invert bound_in_argument. Qed.
 
 
 
@@ -548,4 +555,51 @@ Proof.
     + constructor. intro I. eapply F. { exact I. } apply Map.in_singleton. reflexivity.
     + constructor. destruct move_or_reference0; simpl BoundIn.move_or_reference in *; constructor;
       intros k I B; (eapply F; [exact I |]); apply BoundIn.strict_iff; exact B.
+Qed.
+
+
+
+Lemma unshadow_strict {scrutinee} (Ut : Unshadow.Unshadowed scrutinee)
+  {context} (Uc : Map.ForAll (fun _ => Unshadow.Unshadowed) context)
+  {pattern context_with_matches} (M : Strict context pattern scrutinee context_with_matches)
+  : Map.ForAll (fun _ => Unshadow.Unshadowed) context_with_matches.
+Proof.
+  cbn. generalize dependent Uc. generalize dependent Ut. induction M; intros. { eapply Uc. apply E. exact F. }
+  invert Ut. apply A in F as [[-> ->] | F]. { exact Ua. } eapply IHM; eassumption.
+Qed.
+
+Lemma unshadow_strict_ref {scrutinee} (Ut : Unshadow.Unshadowed scrutinee)
+  {context} (Uc : Map.ForAll (fun _ => Unshadow.Unshadowed) context)
+  {pattern cleaved context_with_matches} (M : StrictRef context pattern scrutinee cleaved context_with_matches)
+  : Unshadow.Unshadowed cleaved /\ Map.ForAll (fun _ => Unshadow.Unshadowed) context_with_matches.
+Proof.
+  cbn. generalize dependent Uc. generalize dependent Ut. induction M; intros.
+  - split. { constructor. } intros. eapply Uc. apply E. exact F.
+  - invert Ut. specialize (IHM Uf Uc) as [IHt IHc]. split.
+    + constructor; intros. { exact IHt. } { constructor. } 2: { invert Ba. }
+      eapply not_bound_in_cleaved in Bf as []. exact M.
+    + intros. apply A in F as [[-> ->] | F]. { exact Ua. } eapply IHc; eassumption.
+Qed.
+
+Lemma unshadow_move_or_reference {scrutinee} (Ut : Unshadow.Unshadowed scrutinee)
+  {context} (Uc : Map.ForAll (fun _ => Unshadow.Unshadowed) context)
+  {pattern context_with_matches} (M : MoveOrReference context pattern scrutinee context_with_matches)
+  : Map.ForAll (fun _ => Unshadow.Unshadowed) context_with_matches.
+Proof.
+  invert M.
+  - eapply unshadow_strict. { exact Ut. } { exact Uc. } exact S.
+  - eapply unshadow_strict_ref in S as [U FA].
+    + cbn. intros. apply OW in F as [[-> ->] | [N F]]. { exact U. } eapply FA. exact F.
+    + eapply Uc. exact lookup.
+    + exact Uc.
+Qed.
+
+Lemma unshadow_pattern {scrutinee} (Ut : Unshadow.Unshadowed scrutinee)
+  {context} (Uc : Map.ForAll (fun _ => Unshadow.Unshadowed) context)
+  {pattern context_with_matches} (M : Pattern context pattern scrutinee context_with_matches)
+  : Map.ForAll (fun _ => Unshadow.Unshadowed) context_with_matches.
+Proof.
+  cbn. intros. invert M.
+  - apply S in F. destruct F as [[-> ->] | F]. { exact Ut. } eapply Uc. exact F.
+  - eapply unshadow_move_or_reference. 3: { exact move_or_reference_matched. } { exact Ut. } { exact Uc. } exact F.
 Qed.

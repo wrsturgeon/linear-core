@@ -182,3 +182,22 @@ Proof.
     + exact rename.
     + eapply Map.eq_trans. { apply Map.eq_sym. exact Ec. } eapply Map.eq_trans. { exact context_unchanged. } exact Ec'.
 Qed.
+
+
+
+Theorem unshadowed_invariant {c t c' t'} (S : Step c t c' t')
+  (Ut : Unshadow.Unshadowed t) (Uc : Map.ForAll (fun _ => Unshadow.Unshadowed) c)
+  : Unshadow.Unshadowed t' /\ Map.ForAll (fun _ => Unshadow.Unshadowed) c'.
+Proof.
+  generalize dependent Uc. generalize dependent Ut. induction S; intros.
+  - split. { eapply Uc. exact lookup. } intros k v F. eapply Uc. apply no_contraction. exact F.
+  - split. { constructor. } intros k v F. destruct IHS as [U FA]. { eapply Uc. exact lookup. }
+    + intros k' v' F'. apply remove_self_from_context in F' as [N' F']. eapply Uc. exact F'.
+    + apply update in F as [[-> ->] | F]. { exact U. } eapply FA. exact F.
+  - cbn. invert unshadowed. invert Ut. invert Uf. invert Uf0. split. { exact Ub. } intros.
+    eapply Match.unshadow_pattern. { exact Ua. } { exact Uc. } { exact matched. } exact F.
+  - invert unshadowed. invert Ut. specialize (IHS Ua Uc) as [IHt IHc]. split.
+    + constructor; try eassumption; intros. { eapply disj_f_a0. { exact Bf. } Abort.
+(* So, no, this is not worth enforcing. In other words, why have laziness if we're spending compute
+ * renaming terms that we might never use? On the other hand, it costs compute to *check* and/or unshadow at every match.
+ * TODO: maybe profile this? *)
