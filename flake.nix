@@ -157,18 +157,124 @@
             }
             // overrides
           );
+        example =
+          script:
+          pkgs.stdenvNoCC.mkDerivation {
+            inherit (self.lib) src;
+            name = "example";
+            buildPhase = ":";
+            installPhase =
+              let
+                with-shabang = ''
+                  #!${pkgs.bash}/bin/bash
+                  set -eu
+                  ${script}
+                '';
+              in
+              ''
+                mkdir -p $out/bin
+                echo ${pkgs.lib.strings.escapeShellArg with-shabang} > $out/bin/example
+                chmod +x $out/bin/example
+              '';
+          };
         rg = "${pkgs.ripgrep}/bin/rg";
       in
       {
         packages = {
+          context = self.lib.context-with-versions { inherit pkgs; };
           coq-only = self.lib.coq-with-versions { inherit pkgs; };
           default = self.lib.with-versions { inherit pkgs; };
-          syntax-check = checker {
+          example-unshadow =
+            with self.packages.${system}.context;
+            ocaml-pkgs.buildDunePackage {
+              pname = "example_unshadow";
+              version = "none";
+              src = self.packages.${system}.example-unshadow-src;
+              propagatedBuildInputs = [ (self.lib.with-context self.packages.${system}.context) ];
+            };
+          example-unshadow-src =
+            let
+              main-ml = ''
+                open Linear_core
+
+                let () =
+                  let err = Linear_core.Term.Ctr (Linear_core.Constructor.Builtin Linear_core.Constructor.Error) in
+                  let term =
+                    Linear_core.Term.App (
+                      Linear_core.Term.Cas (
+                        Linear_core.Pattern.Nam "x",
+                        Linear_core.Term.Mov "x",
+                        Linear_core.Term.Cas (
+                          Linear_core.Pattern.Nam "x",
+                          Linear_core.Term.Mov "x",
+                          Linear_core.Term.Mov "x")),
+                      Linear_core.Term.App (
+                        Linear_core.Term.Cas (
+                          Linear_core.Pattern.Nam "x",
+                          err,
+                          err),
+                        err)) in
+                  let stringified = Linear_core.Term.to_string term in
+                  print_endline "Original term:";
+                  print_endline stringified;
+                  print_endline "";
+                  match Linear_core.Unshadow.unshadow term with
+                  | None ->
+                      print_endline "ERROR: FAILED TO UNSHADOW";
+                      exit 1
+                  | Some unshadowed ->
+                      let stringified_unshadowed = Linear_core.Term.to_string unshadowed in
+                      print_endline "Unshadowed:";
+                      print_endline stringified_unshadowed
+              '';
+              uname = "example_unshadow";
+            in
+            pkgs.stdenvNoCC.mkDerivation {
+              name = "example-unshadow-src";
+              src = nix-filter {
+                root = ./.;
+                include = [ ];
+              };
+              buildInputs = with self.packages.${system}.context; [ dune ];
+              buildPhase = ''
+                dune init proj ${uname} ./${uname}
+                sed -i 's/libraries/libraries linear_core/g' ${uname}/bin/dune
+                echo ${pkgs.lib.strings.escapeShellArg main-ml} > ${uname}/bin/main.ml
+              '';
+              installPhase = "cp -Lr ./${uname} $out";
+            };
+          examples = example (
+            pkgs.lib.strings.concatStrings (
+              builtins.map
+                (
+                  name:
+                  let
+                    bin = "${self.packages.${system}.${name}}/bin";
+                    cut = "${pkgs.coreutils}/bin/cut";
+                    echo = "${pkgs.coreutils}/bin/echo";
+                    rev = "${pkgs.util-linux}/bin/rev";
+                  in
+                  ''
+
+                    if [ -d ${bin} ]; then
+                      for run in ${bin}/*; do
+                        if [ -x ''${run} ]; then
+                          ${echo}
+                          ${echo} '%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Running `${pkgs.lib.removePrefix "example-" name}` (binary `'"$(${echo} "''${run}" | ${rev} | ${cut} -d '/' -f 1 | ${rev})"'`)...'
+                          ${echo}
+                          ''${run}
+                        fi
+                      done
+                    fi
+                  ''
+                )
+                (
+                  builtins.filter (pkgs.lib.strings.hasPrefix "example-") (builtins.attrNames self.packages.${system})
+                )
+            )
+          );
+          test-syntax = checker {
             buildPhase = ''
-              #!${pkgs.bash}/bin/bash
-
-              set -eu
-
               if ${rg} 'Admitted|Axiom|Conjecture|Parameter|Hypothesis|Hypotheses|Variable' -g '*.v' -g '!theories/NewNames.v'; then
                 echo
                 echo 'SYNTAX ERROR: unverified assumption (above)'
@@ -218,7 +324,6 @@
                 (self.lib.with-context self.packages.${system}.context)
               ];
             };
-          context = self.lib.context-with-versions { inherit pkgs; };
           test-ocaml-src =
             let
               pname = "test_ocaml";
@@ -237,70 +342,9 @@
               '';
               installPhase = "cp -Lr ./${pname} $out";
             };
-          test-unshadow =
-            with self.packages.${system}.context;
-            ocaml-pkgs.buildDunePackage {
-              pname = "test_unshadow";
-              version = "none";
-              src = self.packages.${system}.test-unshadow-src;
-              propagatedBuildInputs = [ (self.lib.with-context self.packages.${system}.context) ];
-            };
-          test-unshadow-src =
-            let
-              main-ml = ''
-                open Linear_core
-
-                let () =
-                  let err = Linear_core.Term.Ctr (Linear_core.Constructor.Builtin Linear_core.Constructor.Error) in
-                  let term =
-                    Linear_core.Term.App (
-                      Linear_core.Term.Cas (
-                        Linear_core.Pattern.Nam "x",
-                        Linear_core.Term.Mov "x",
-                        Linear_core.Term.Cas (
-                          Linear_core.Pattern.Nam "x",
-                          Linear_core.Term.Mov "x",
-                          Linear_core.Term.Mov "x")),
-                      Linear_core.Term.App (
-                        Linear_core.Term.Cas (
-                          Linear_core.Pattern.Nam "x",
-                          err,
-                          err),
-                        err)) in
-                  let stringified = Linear_core.Term.to_string term in
-                  print_endline "Original term:";
-                  print_endline stringified;
-                  print_endline "";
-                  match Linear_core.Unshadow.unshadow term with
-                  | None ->
-                      print_endline "ERROR: FAILED TO UNSHADOW";
-                      exit 1
-                  | Some unshadowed ->
-                      let stringified_unshadowed = Linear_core.Term.to_string unshadowed in
-                      print_endline "Unshadowed:";
-                      print_endline stringified_unshadowed
-              '';
-              uname = "test_unshadow";
-            in
-            pkgs.stdenvNoCC.mkDerivation {
-              name = "test-unshadow-src";
-              src = nix-filter {
-                root = ./.;
-                include = [ ];
-              };
-              buildInputs = with self.packages.${system}.context; [ dune ];
-              buildPhase = ''
-                dune init proj ${uname} ./${uname}
-                sed -i 's/libraries/libraries linear_core/g' ${uname}/bin/dune
-                echo ${pkgs.lib.strings.escapeShellArg main-ml} > ${uname}/bin/main.ml
-              '';
-              installPhase = "cp -Lr ./${uname} $out";
-            };
           tests = checker {
             buildInputs = builtins.map (pkg: self.packages.${system}.${pkg}) (
-              builtins.filter (name: name != "tests" && pkgs.lib.strings.hasPrefix "test" name) (
-                builtins.attrNames self.packages.${system}
-              )
+              builtins.filter (pkgs.lib.strings.hasPrefix "test-") (builtins.attrNames self.packages.${system})
             );
           };
         };

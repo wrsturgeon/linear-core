@@ -40,10 +40,10 @@ jobs:
     - name: Nix
       run: nix build
 
-    - name: Nix tests
-      run: nix build .\#tests
+    - name: Examples
+      run: nix run .\#examples
 
-    - name: Syntax check
-      run: nix build .\#syntax-check
+    - name: Tests
+      run: nix build .\#tests
 
     - uses: actions/checkout@v4
