@@ -716,6 +716,25 @@ Lemma domain_domain {T} (m : to T)
   : Domain m (domain m).
 Proof. intro k. rewrite in_domain. reflexivity. Qed.
 
+Lemma domain_det {T} {m1 : to T} {d1} (D1 : Domain m1 d1)
+  {m2 : to T} (Em : Eq m1 m2) {d2} (D2 : Domain m2 d2)
+  : Eq d1 d2.
+Proof.
+  intros k []. split; intro F; (eassert (I : In _ _); [eexists; exact F |]);
+  [apply D1 in I | apply D2 in I]; destruct I as [v F']; apply Em in F';
+  (eassert (I : In _ _); [eexists; exact F' |]);
+  [apply D2 in I | apply D1 in I]; destruct I as [[] F'']; exact F''.
+Qed.
+
+Lemma domain_eq {T} {m1 : to T} {d1} (D1 : Domain m1 d1)
+  {m2 : to T} (Em : Eq m1 m2) {d2} (Ed : Eq d1 d2)
+  : Domain m2 d2.
+Proof.
+  split; intros [v F].
+  - apply Em in F. eapply in_eq. { apply eq_sym. exact Ed. } apply D1. exists v. exact F.
+  - apply Ed in F. eapply in_eq. { apply eq_sym. exact Em. } apply D1. exists v. exact F.
+Qed.
+
 
 
 Definition fold {X Y} (f : String.string -> X -> Y -> Y) (acc : Y) (m : to X) : Y := @MapCore.fold X Y f m acc.
