@@ -447,7 +447,7 @@ Inductive Unshadowed : Term.term -> Prop :=
       : Unshadowed (Term.Cas pattern body_if_match other_cases)
   .
 
-Lemma unshadowed_acc {acc reserved t reserved' renamed}
+Lemma on_the_tin_acc {acc reserved t reserved' renamed}
   (E : unshadow_acc acc reserved t = Some (reserved', renamed))
   (prev : forall x y (Fa : Map.Find acc x y), Map.In reserved y)
   : Unshadowed renamed.
@@ -507,16 +507,198 @@ Proof.
       eapply bindings. 3: { left. exact Bo. } { exact E2. } exact prev.
 Qed.
 
-Lemma unshadowed_reserve {reserved t renamed} (E : unshadow_reserve reserved t = Some renamed)
+Lemma on_the_tin_reserve {reserved t renamed} (E : unshadow_reserve reserved t = Some renamed)
   : Unshadowed renamed.
 Proof.
-  cbn in E. destruct unshadow_acc as [[? ?] |] eqn:Ea; invert E. eapply unshadowed_acc in Ea. { exact Ea. }
+  cbn in E. destruct unshadow_acc as [[? ?] |] eqn:Ea; invert E. eapply on_the_tin_acc in Ea. { exact Ea. }
   intros k v F. apply Map.in_overriding_union. right. rewrite Map.in_range. eexists. exact F.
 Qed.
 
-Lemma unshadowed {t renamed} (E : unshadow t = Some renamed)
+Lemma on_the_tin {t renamed} (E : unshadow t = Some renamed)
   : Unshadowed renamed.
-Proof. apply unshadowed_reserve in E. exact E. Qed.
+Proof. apply on_the_tin_reserve in E. exact E. Qed.
+
+
+
+Fixpoint unshadowed_acc t :=
+  match t with
+  | Term.Ctr _ =>
+      Some (Map.empty, Map.empty)
+  | Term.Mov name
+  | Term.Ref name =>
+      Some (Map.empty, Map.singleton name tt)
+  | Term.App function argument =>
+      match unshadowed_acc function with None => None | Some (bound_in_function, used_in_function) =>
+      match unshadowed_acc argument with None => None | Some (bound_in_argument, used_in_argument) =>
+      if andb
+        (Map.disjoint bound_in_function used_in_argument)
+        (Map.disjoint bound_in_argument used_in_function)
+      then Some (
+        Map.set_union bound_in_function bound_in_argument,
+        Map.set_union used_in_argument used_in_function)
+      else None end end
+  | Term.For variable type body =>
+      match unshadowed_acc type with None => None | Some (bound_in_type, used_in_type) =>
+      match unshadowed_acc body with None => None | Some (bound_in_body, used_in_body) =>
+      if
+        andb (Map.disjoint bound_in_type used_in_body) $
+        andb (Map.disjoint bound_in_body used_in_type) $
+        andb (negb $ Map.in_ bound_in_type variable) $ negb $ Map.in_ bound_in_body variable
+      then Some (
+        Map.set_add variable $ Map.set_union bound_in_type bound_in_body,
+        Map.set_union used_in_type $ Map.remove variable used_in_body)
+      else None end end
+  | Term.Cas pattern body_if_match other_cases =>
+      match unshadowed_acc body_if_match with None => None | Some (bound_in_body_if_match, used_in_body_if_match) =>
+      match unshadowed_acc other_cases with None => None | Some (bound_in_other_cases, used_in_other_cases) =>
+      let bound_in_pattern := BoundIn.pattern pattern in
+      if
+        andb (Map.disjoint bound_in_body_if_match used_in_other_cases) $
+        andb (Map.disjoint bound_in_other_cases used_in_body_if_match) $
+        andb (Map.disjoint bound_in_pattern bound_in_body_if_match) $
+        Map.disjoint bound_in_pattern bound_in_other_cases
+      then Some (
+        Map.set_union bound_in_pattern $ Map.set_union bound_in_body_if_match bound_in_other_cases,
+        Map.set_union used_in_other_cases $ Map.minus used_in_body_if_match bound_in_pattern)
+      else None end end
+  end.
+
+Definition unshadowed t := match unshadowed_acc t with None => false | Some _ => true end.
+Arguments unshadowed t/.
+
+Lemma unshadowed_acc_bound_used {t bound used} (E : unshadowed_acc t = Some (bound, used))
+  : Map.Reflect (BoundIn.Term t) bound /\ Map.Reflect (UsedIn.Term t) used.
+Proof.
+  generalize dependent used. generalize dependent bound. induction t; intros; cbn in *.
+  - invert E. split; intros.
+    + split. { intro I. apply Map.empty_empty in I as []. } intro B. invert B.
+    + split. { intro I. apply Map.empty_empty in I as []. } intro B. invert B.
+  - invert E. split; intros.
+    + split. { intro I. apply Map.empty_empty in I as []. } intro B. invert B.
+    + split. { intro I. apply Map.in_singleton in I as ->. constructor. }
+      intro U. invert U. apply Map.in_singleton. reflexivity.
+  - invert E. split; intros.
+    + split. { intro I. apply Map.empty_empty in I as []. } intro B. invert B.
+    + split. { intro I. apply Map.in_singleton in I as ->. constructor. }
+      intro U. invert U. apply Map.in_singleton. reflexivity.
+  - destruct unshadowed_acc as [[bound_in_function used_in_function] |] eqn:Ef in E. 2: { discriminate E. }
+    destruct unshadowed_acc as [[bound_in_argument used_in_argument] |] eqn:Ea in E. 2: { discriminate E. }
+    assert (D := @Map.disjoint_spec unit unit). cbn in D.
+    destruct (D bound_in_function used_in_argument). 2: { discriminate E. }
+    destruct (D bound_in_argument used_in_function); invert E. clear D.
+    specialize (IHt1 _ _ Ef) as [Bf Uf]. specialize (IHt2 _ _ Ea) as [Ba Ua]. split; intros.
+    + split.
+      * intro I. apply Map.in_overriding_union in I as [I | I].
+        -- apply BoundIn.TApF. apply Bf. exact I.
+        -- apply BoundIn.TApA. apply Ba. exact I.
+      * intro B. apply Map.in_overriding_union. invert B; [left | right].
+        -- apply Bf. exact bound_in_function0.
+        -- apply Ba. exact bound_in_argument0.
+    + split.
+      * intro I. apply Map.in_overriding_union in I as [I | I].
+        -- apply UsedIn.ApA. apply Ua. exact I.
+        -- apply UsedIn.ApF. apply Uf. exact I.
+      * intro B. apply Map.in_overriding_union. invert B; [right | left].
+        -- apply Uf. exact used_in_function0.
+        -- apply Ua. exact used_in_argument0.
+  - destruct unshadowed_acc as [[bound_in_type used_in_type] |] eqn:Et in E. 2: { discriminate E. }
+    destruct unshadowed_acc as [[bound_in_body used_in_body] |] eqn:Eb in E. 2: { discriminate E. }
+    assert (D := @Map.disjoint_spec unit unit). cbn in D.
+    destruct (D bound_in_type used_in_body). 2: { discriminate E. }
+    destruct (D bound_in_body used_in_type). 2: { discriminate E. } clear D.
+    assert (I := @Map.in_spec unit). cbn in I.
+    destruct (I bound_in_type variable). { discriminate E. }
+    destruct (I bound_in_body variable); invert E. clear I.
+    specialize (IHt1 _ _ Et) as [Bt Ut]. specialize (IHt2 _ _ Eb) as [Bb Ub]. split; intros.
+    + split.
+      * intro I. apply Map.in_overriding_add in I as [-> | I]. { constructor. }
+        apply Map.in_overriding_union in I as [I | I]. { apply BoundIn.TFoT. apply Bt. exact I. }
+        apply BoundIn.TFoB. apply Bb. exact I.
+      * intro B. apply Map.in_overriding_add. invert B; [left; reflexivity | |];
+        right; apply Map.in_overriding_union; [left | right]. { apply Bt. exact bound_in_type0. }
+        apply Bb. exact bound_in_body0.
+    + split.
+      * intro I. apply Map.in_overriding_union in I as [I | I]. { apply UsedIn.FoT. apply Ut. exact I. }
+        eapply Map.in_remove_if_present in I as [Nx I]. 2: { apply Map.remove_if_present_remove. }
+        apply UsedIn.FoB. { exact Nx. } apply Ub. exact I.
+      * intro U. apply Map.in_overriding_union. invert U; [left | right]. { apply Ut. exact used_in_type0. }
+        eapply Map.in_remove_if_present. { apply Map.remove_if_present_remove. }
+        split. { exact not_shadowed. } apply Ub. exact used_in_body0.
+  - destruct unshadowed_acc as [[bound_in_body_if_match used_in_body_if_match] |] eqn:Eb in E. 2: { discriminate E. }
+    destruct unshadowed_acc as [[bound_in_other_cases used_in_other_cases] |] eqn:Eo in E. 2: { discriminate E. }
+    assert (D := @Map.disjoint_spec unit unit). cbn in D.
+    destruct (D bound_in_body_if_match used_in_other_cases). 2: { discriminate E. }
+    destruct (D bound_in_other_cases used_in_body_if_match). 2: { discriminate E. }
+    destruct (D (BoundIn.pattern pattern) bound_in_body_if_match). 2: { discriminate E. }
+    destruct (D (BoundIn.pattern pattern) bound_in_other_cases); invert E. clear D.
+    specialize (IHt1 _ _ Eb) as [Bb Ub]. specialize (IHt2 _ _ Eo) as [Bo Uo]. split; intros.
+    + split.
+      * intro I. apply Map.in_overriding_union in I as [I | I]. { apply BoundIn.TCaP. apply BoundIn.pattern_iff. exact I. }
+        apply Map.in_overriding_union in I as [I | I]. { apply BoundIn.TCaB. apply Bb. exact I. }
+        apply BoundIn.TCaO. apply Bo. exact I.
+      * intro B. apply Map.in_overriding_union. invert B; [left; apply BoundIn.pattern_iff; exact bound_in_pattern | |];
+        right; apply Map.in_overriding_union; [left | right]. { apply Bb. exact bound_in_body. }
+        apply Bo. exact bound_in_another_case.
+    + split.
+      * intro I. apply Map.in_overriding_union in I as [I | [y F]]. { apply UsedIn.CaO. apply Uo. exact I. }
+        apply Map.minus_minus in F as [F N]. apply UsedIn.CaB. 2: { apply Ub. eexists. exact F. }
+        intro B. apply N. apply BoundIn.pattern_iff. exact B.
+      * intro U. apply Map.in_overriding_union. invert U; [right | left]. 2: { apply Uo. exact used_in_another_case. }
+        apply Ub in used_in_body as [y F]. eexists. apply Map.minus_minus. split. { exact F. }
+        intro B. apply not_shadowed. apply BoundIn.pattern_iff. exact B.
+Qed.
+
+Lemma unshadowed_spec t
+  : Reflect.Bool (Unshadowed t) (unshadowed t).
+Proof.
+  induction t; cbn in *.
+  - constructor. constructor.
+  - constructor. constructor.
+  - constructor. constructor.
+  - destruct unshadowed_acc as [[bound_in_function used_in_function] |] eqn:Ef; invert IHt1. 2: {
+      constructor. intro U. apply N. invert U. exact Uf. }
+    destruct unshadowed_acc as [[bound_in_argument used_in_argument] |] eqn:Ea at 1; rewrite Ea in IHt2; invert IHt2. 2: {
+      constructor. intro U. apply N. invert U. exact Ua. }
+    destruct (unshadowed_acc_bound_used Ef) as [Bf Uf]. destruct (unshadowed_acc_bound_used Ea) as [Ba Ua].
+    assert (D := @Map.disjoint_spec unit unit). cbn in D. destruct (D bound_in_function used_in_argument). 2: {
+      constructor. intro C. invert C. apply N. intros. eapply disj_f_a. { apply Bf. exact Ma. } apply Ua. exact Mb. }
+    destruct (D bound_in_argument used_in_function); constructor. 2: {
+      intro C. invert C. apply N. intros. eapply disj_a_f. { apply Ba. exact Ma. } apply Uf. exact Mb. }
+    constructor. { exact Y. } { exact Y0. } { intros. eapply Y1. { apply Bf. exact Bf0. } apply Ua. exact Ua0. }
+    intros. eapply Y2. { apply Ba. exact Ba0. } apply Uf. exact Uf0.
+  - destruct unshadowed_acc as [[bound_in_type used_in_type] |] eqn:Et; invert IHt1. 2: {
+      constructor. intro U. apply N. invert U. exact Ut. }
+    destruct unshadowed_acc as [[bound_in_body used_in_body] |] eqn:Eb at 1; rewrite Eb in IHt2; invert IHt2. 2: {
+      constructor. intro U. apply N. invert U. exact Ub. }
+    destruct (unshadowed_acc_bound_used Et) as [Bt Ut]. destruct (unshadowed_acc_bound_used Eb) as [Bb Ub].
+    assert (D := @Map.disjoint_spec unit unit). cbn in D. destruct (D bound_in_type used_in_body). 2: {
+      constructor. intro C. invert C. apply N. intros. eapply disj_t_b. { apply Bt. exact Ma. } apply Ub. exact Mb. }
+    destruct (D bound_in_body used_in_type). 2: {
+      constructor. intro C. invert C. apply N. intros. eapply disj_b_t. { apply Bb. exact Ma. } apply Ut. exact Mb. }
+    clear D. assert (I := @Map.in_spec unit). cbn in I. destruct (I bound_in_type variable). {
+      constructor. intro C. invert C. apply Nt. apply Bt. exact Y3. }
+    destruct (I bound_in_body variable); constructor. { intro C. invert C. apply Nb. apply Bb. exact Y3. }
+    constructor. { exact Y. } { exact Y0. } { intros. eapply Y1. { apply Bt. exact Bt0. } apply Ub. exact Ub0. }
+    { intros. eapply Y2. { apply Bb. exact Bb0. } apply Ut. exact Ut0. } { intro B. apply N. apply Bt. exact B. }
+    intro B. apply N0. apply Bb. exact B.
+  - destruct unshadowed_acc as [[bound_in_body_if_match used_in_body_if_match] |] eqn:Eb; invert IHt1. 2: {
+      constructor. intro U. apply N. invert U. exact Ub. }
+    destruct unshadowed_acc as [[bound_in_other_cases used_in_other_cases] |] eqn:Eo at 1; rewrite Eo in IHt2; invert IHt2. 2: {
+      constructor. intro U. apply N. invert U. exact Uo. }
+    destruct (unshadowed_acc_bound_used Eb) as [Bb Ub]. destruct (unshadowed_acc_bound_used Eo) as [Bo Uo].
+    assert (D := @Map.disjoint_spec unit unit). cbn in D. destruct (D bound_in_body_if_match used_in_other_cases). 2: {
+      constructor. intro C. invert C. apply N. intros. eapply disj_b_o. { apply Bb. exact Ma. } apply Uo. exact Mb. }
+    destruct (D bound_in_other_cases used_in_body_if_match). 2: {
+      constructor. intro C. invert C. apply N. intros. eapply disj_o_b. { apply Bo. exact Ma. } apply Ub. exact Mb. }
+    destruct (D (BoundIn.pattern pattern) bound_in_body_if_match). 2: {
+      constructor. intro C. invert C. eapply N. intros. eapply Nb. { apply BoundIn.pattern_iff. exact Ma. } apply Bb. exact Mb. }
+    destruct (D (BoundIn.pattern pattern) bound_in_other_cases); constructor. 2: {
+      intro C. invert C. eapply N. intros. eapply No. { apply BoundIn.pattern_iff. exact Ma. } apply Bo. exact Mb. }
+    constructor; intros. { exact Y. } { exact Y0. } { eapply Y1. { apply Bb. exact Bb0. } apply Uo. exact Uo0. }
+    + eapply Y2. { apply Bo. exact Bo0. } apply Ub. exact Ub0.
+    + eapply Y3. { apply BoundIn.pattern_iff. exact Bp. } apply Bb. exact Bt.
+    + eapply Y4. { apply BoundIn.pattern_iff. exact Bp. } apply Bo. exact Bo0.
+Qed.
 
 
 

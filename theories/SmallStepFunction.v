@@ -21,6 +21,10 @@ Definition to_string (h : Halt.halt (Context.context * Term.term)) : string :=
   | Halt.OutOfFuel => "<out of time>"
   end.
 
+(* TODO: Much later, instead of continually checking all bound and used terms in `unshadowed`,
+ * consider keeping a running tally of all bound and used terms, then
+ * incrementally updating it with each step, to cache most of the work. *)
+
 (*
 Fixpoint step (fuel : Fuel.fuel) (context : Context.context) (term : Term.term) : Halt.halt (Context.context * Term.term) :=
   VerbosePrint.format to_string $
