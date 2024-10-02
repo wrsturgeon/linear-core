@@ -156,7 +156,7 @@ Inductive StrictRef (context : Context.context) : Pattern.strict -> Term.term ->
       : StrictRef context
         (Pattern.App function_pattern argument_name)
         (Term.App function argument)
-        (Term.App function_cleaved (Term.Mov argument_name))
+        (Term.App function_cleaved (Term.Var argument_name Ownership.Owned))
         context_with_matches
   .
 Arguments StrictRef context strict scrutinee cleaved context_with_matches.
@@ -172,7 +172,7 @@ Fixpoint strict_ref context pattern scrutinee : option (Term.term * Context.cont
           match Map.disjoint_add argument_name argument context_with_function_matches with
           | None => None
           | Some context_with_matches =>
-              Some (Term.App function_cleaved (Term.Mov argument_name), context_with_matches)
+              Some (Term.App function_cleaved (Term.Var argument_name Ownership.Owned), context_with_matches)
           end
       end
   | _, _ => None
@@ -275,10 +275,10 @@ Variant MoveOrReference (context : Context.context) : Pattern.move_or_reference 
   | Mov strict scrutinee context_with_matches (S : Strict context strict scrutinee context_with_matches)
       : MoveOrReference context (Pattern.Mov strict) scrutinee context_with_matches
   | Ref
-      {name scrutinee} (follow_references : Context.FollowReferences context (Term.Ref name) scrutinee)
+      {name scrutinee} (follow_references : Context.FollowReferences context (Term.Var name Ownership.Referenced) scrutinee)
       strict old_context_with_matches cleaved (S : StrictRef context strict scrutinee cleaved old_context_with_matches)
       context_with_matches (OW : Map.Overwrite name cleaved old_context_with_matches context_with_matches)
-      : MoveOrReference context (Pattern.Ref strict) (Term.Ref name) context_with_matches
+      : MoveOrReference context (Pattern.Ref strict) (Term.Var name Ownership.Referenced) context_with_matches
   .
 Arguments MoveOrReference context strict scrutinee context_with_matches.
 
@@ -288,10 +288,10 @@ Example match_referenced_application ctor arg argn name (N : argn <> name)
     let context := Map.overriding_add name scrutinee Map.empty in
     let context_with_matches :=
       (* Note how each right-hand branch is turned into a `Mov` referencing the contents of the branch: *)
-      Map.overriding_add name (Term.App (Term.Ctr ctor) (Term.Mov argn)) (
+      Map.overriding_add name (Term.App (Term.Ctr ctor) (Term.Var argn Ownership.Owned)) (
       Map.overriding_add argn arg (
       Map.empty)) in
-    MoveOrReference context pattern (Term.Ref name) context_with_matches.
+    MoveOrReference context pattern (Term.Var name Ownership.Referenced) context_with_matches.
 Proof.
   cbn. econstructor.
   - econstructor.
@@ -322,11 +322,11 @@ Example match_referenced_application_deep ctor arg1 arg2 arg1n arg2n name
     let context := Map.overriding_add name scrutinee Map.empty in
     let context_with_matches :=
       (* Note how each right-hand branch is turned into a `Mov` referencing the contents of the branch: *)
-      Map.overriding_add name (Term.App (Term.App (Term.Ctr ctor) (Term.Mov arg1n)) (Term.Mov arg2n)) (
-      Map.overriding_add arg1n arg1 (
-      Map.overriding_add arg2n arg2 (
-      Map.empty))) in
-    MoveOrReference context pattern (Term.Ref name) context_with_matches.
+      Map.overriding_add name (Term.App
+        (Term.App (Term.Ctr ctor) (Term.Var arg1n Ownership.Owned))
+        (Term.Var arg2n Ownership.Owned)
+      ) $ Map.overriding_add arg1n arg1 $ Map.overriding_add arg2n arg2 Map.empty in
+    MoveOrReference context pattern (Term.Var name Ownership.Referenced) context_with_matches.
 Proof.
   cbn. econstructor.
   - econstructor.
@@ -368,7 +368,7 @@ Definition move_or_reference context pattern scrutinee :=
       end
   | Pattern.Ref s =>
       match scrutinee with
-      | Term.Ref name =>
+      | Term.Var name Ownership.Referenced =>
           match Context.follow_references context scrutinee with None => None | Some term =>
             match strict_ref context s term with None => None | Some (cleaved, context_with_matches) =>
               Some $ Map.overwrite name cleaved context_with_matches
@@ -429,8 +429,8 @@ Proof.
   destruct pattern; cbn.
   - cbn. destruct (strict_spec context strict0 scrutinee); constructor. { constructor. exact Y. }
     intros x MR. invert MR. apply N in S as [].
-  - destruct scrutinee; try (constructor; intros m C; invert C).
-    destruct (Context.follow_references_spec context $ Term.Ref name). 2: {
+  - destruct scrutinee; try (constructor; intros m C; invert C). destruct ownership. { constructor. intros m C. invert C. }
+    destruct (Context.follow_references_spec context $ Term.Var name Ownership.Referenced). 2: {
       constructor. intros m C. invert C. apply N in follow_references as []. }
     destruct (strict_ref_spec context strict0 x) as [[cleaved context_with_matches] |]. 2: { constructor. intros m C. invert C.
       destruct (Context.follow_references_det Y (Map.eq_refl _) eq_refl follow_references). apply (N (_, _)) in S as []. }

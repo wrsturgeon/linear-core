@@ -18,7 +18,7 @@ Inductive Step (context : Context.context) : Term.term -> Context.context -> Ter
   | Mov
       {name term} (lookup : Map.Find context name term)
       {context_without_name} (no_contraction : Map.Remove name context context_without_name)
-      : Step context (Term.Mov name) context_without_name term
+      : Step context (Term.Var name Ownership.Owned) context_without_name term
   | Ref
       {self term} (lookup : Map.Find context self term)
       {context_without_self} (remove_self_from_context : Map.Remove self context context_without_self)
@@ -27,7 +27,7 @@ Inductive Step (context : Context.context) : Term.term -> Context.context -> Ter
       (not_overwriting_self : forall (I : Map.In updated_context_without_self self), False)
       {context_updated_in_place} (update
         : Map.Add self stepped updated_context_without_self context_updated_in_place)
-      : Step context (Term.Ref self) context_updated_in_place (Term.Ref self)
+      : Step context (Term.Var self Ownership.Referenced) context_updated_in_place $ Term.Var self Ownership.Referenced
   | ApF {function updated_context updated_function}
       (reduce_function : Step context function updated_context updated_function) argument
       : Step context (Term.App function argument) updated_context (Term.App updated_function argument)

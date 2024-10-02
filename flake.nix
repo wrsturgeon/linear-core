@@ -199,15 +199,16 @@
 
                 let () =
                   let err = Linear_core.Term.Ctr (Linear_core.Constructor.Builtin Linear_core.Constructor.Error) in
+                  let mov = (fun x -> Linear_core.Term.Var (x, Linear_core.Ownership.Owned)) in
                   let term =
                     Linear_core.Term.App (
                       Linear_core.Term.Cas (
                         Linear_core.Pattern.Nam "x",
-                        Linear_core.Term.Mov "x",
+                        mov "x",
                         Linear_core.Term.Cas (
                           Linear_core.Pattern.Nam "x",
-                          Linear_core.Term.Mov "x",
-                          Linear_core.Term.Mov "x")),
+                          mov "x",
+                          mov "x")),
                       Linear_core.Term.App (
                         Linear_core.Term.Cas (
                           Linear_core.Pattern.Nam "x",

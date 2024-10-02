@@ -22,8 +22,8 @@ Inductive FollowReferences (context : context) : Term.term -> Term.term -> Prop 
   | Ref {name term} (F : Map.Find context name term)
       {without_self} (R : Map.Remove name context without_self)
       {followed} (transitive : FollowReferences without_self term followed)
-      : FollowReferences context (Term.Ref name) followed
-  | Nonref {term} (N : forall name (E : term = Term.Ref name), False)
+      : FollowReferences context (Term.Var name Ownership.Referenced) followed
+  | Nonref {term} (N : forall name (E : term = Term.Var name Ownership.Referenced), False)
       {followed} (E : term = followed)
       : FollowReferences context term followed
   .
@@ -59,7 +59,7 @@ Proof. apply Telescopes.wf_tele_measure. exact Subterm.lt_wf. Qed.
 
 Equations follow_references (context : Context.context) (term : Term.term)
   : option Term.term by wf (Map.cardinality context) lt :=
-  follow_references context (Term.Ref name) with Map.found_dec context name => {
+  follow_references context $ Term.Var name Ownership.Referenced with Map.found_dec context name => {
   | Map.NotFound => None
   | @Map.Found next _ => follow_references (Map.remove name context) next };
   follow_references _ term := Some term.
@@ -88,10 +88,10 @@ Proof.
   - constructor. intros t C. invert C. { apply N in F as []. } eapply N0. reflexivity.
 Qed.
 
-Lemma follow_maps_to_last {context name followed} (F : FollowReferences context (Term.Ref name) followed)
+Lemma follow_maps_to_last {context name followed} (F : FollowReferences context (Term.Var name Ownership.Referenced) followed)
   : exists second_to_last, Map.Find context second_to_last followed.
 Proof.
-  remember (Term.Ref name) as r eqn:Er. generalize dependent name. induction F; intros; subst.
+  remember (Term.Var name Ownership.Referenced) as r eqn:Er. generalize dependent name. induction F; intros; subst.
   - symmetry in Er. invert Er. invert F0. 2: { eexists. exact F. }
     specialize (IHF _ eq_refl) as [second_to_last IH]. apply R in IH as [N IH]. eexists. exact IH.
   - edestruct N as []. reflexivity.

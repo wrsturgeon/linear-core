@@ -63,7 +63,7 @@ Inductive ShapeOrRef context : Term.term -> shape -> Prop :=
   | RRef {name term} (F : Map.Find context name term)
       {without_self} (R : Map.Remove name context without_self)
       {shape} (S : ShapeOrRef without_self term shape)
-      : ShapeOrRef context (Term.Ref name) shape
+      : ShapeOrRef context (Term.Var name Ownership.Referenced) shape
   | RApp {curried} (curried_resource : ShapeOf curried Resource) argument
       : ShapeOrRef context (Term.App curried argument) Resource
   | RCas pattern body_if_match other_cases
@@ -97,7 +97,7 @@ Fixpoint shape_or_ref fuel context t :=
   match fuel with Fuel.Stop => Halt.OutOfFuel | Fuel.Continue fuel =>
     match t with
     | Term.Ctr _ => Halt.Return Resource
-    | Term.Ref name =>
+    | Term.Var name Ownership.Referenced =>
         match Map.find context name with None => Halt.Exit | Some term =>
           shape_or_ref fuel (Map.remove name context) term
         end
@@ -117,7 +117,8 @@ Proof.
   generalize dependent t. generalize dependent context. induction fuel. { constructor. }
   destruct t; cbn; try solve [constructor; intros s C; invert C].
   - constructor. constructor.
-  - destruct (Map.find_spec context name). 2: { constructor. intros s C. invert C. apply N in F as []. }
+  - destruct ownership. { constructor. intros s S. invert S. }
+    destruct (Map.find_spec context name). 2: { constructor. intros s C. invert C. apply N in F as []. }
     destruct (IHfuel (Map.remove name context) x); constructor.
     + econstructor. { exact Y. } 2: { exact Y0. } apply Map.remove_remove. eexists. exact Y.
     + intros s C. invert C. destruct (Map.find_det Y F). eapply N. eapply eq_ref. { exact S. } 2: { reflexivity. }

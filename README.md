@@ -8,8 +8,7 @@ Terms and types:
 ```ebnf
 <term> ::=
   | Constructor <constructor>
-  | Move <name>
-  | Reference <name>
+  | Variable <name> <ownership>
   | Application <term> <term>
   | Forall <name> <term> <term>
   | Case <pattern> <term> <term>
@@ -35,6 +34,13 @@ Constructors:
 <constructor> ::=
   | Builtin <builtin-constructor>
   | UserDefined <name>
+```
+
+Ownership:
+```ebnf
+<ownership> ::=
+  | Owned
+  | Referenced
 ```
 
 

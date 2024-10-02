@@ -29,18 +29,18 @@ Fixpoint step (fuel : Fuel.fuel) (context : Context.context) (term : Term.term) 
   VerbosePrint.format to_string $
   match fuel with Fuel.Stop => Halt.OutOfFuel | Fuel.Continue fuel =>
     match term with
-    | Term.Mov name =>
+    | Term.Var name Ownership.Owned =>
         match Map.find context name with
         | None => Halt.Exit
         | Some updated_term => Halt.Return (Map.remove name context, updated_term)
         end
-    | Term.Ref self =>
+    | Term.Var self Ownership.Referenced =>
         match Map.find context self with None => Halt.Exit | Some looked_up =>
           let context_without_self := Map.remove self context in
           match step fuel context_without_self looked_up with
           | Halt.Return (updated_context_without_self, stepped) =>
             match Map.find updated_context_without_self self with Some _ => Halt.Exit | None =>
-              Halt.Return (Map.overriding_add self stepped updated_context_without_self, Term.Ref self)
+              Halt.Return (Map.overriding_add self stepped updated_context_without_self, Term.Var self Ownership.Referenced)
             end
           | other => other
           end
@@ -133,33 +133,34 @@ Theorem spec fuel context term
 Proof.
   generalize dependent term. generalize dependent context. induction fuel. { constructor. }
   destruct term; try solve [constructor; intros [updated_context updated_term] S; invert S].
-  - cbn. destruct (Map.find_spec context name); constructor; cbn in *.
-    + constructor. { exact Y. } apply Map.remove_remove. eexists. exact Y.
-    + intros [updated_context updated_term] S; cbn in *. invert S. apply N in lookup as [].
-  - cbn. destruct (Map.find_spec context name). 2: {
-      constructor. intros [m t] C; cbn in *. invert C. apply N in lookup as []. }
-    destruct (IHfuel (Map.remove name context) x). 3: { constructor. } 2: {
-      constructor. intros [m t] C; cbn in *. invert C. eapply (N (_, _)). eapply SmallStep.eq.
-      * exact step_in_context.
-      * intros x' y'. destruct remove_self_from_context as [I R]. cbn in R. rewrite R.
-        destruct (Map.remove_remove I) as [_ R']. cbn in R'. rewrite R'. reflexivity.
-      * eapply Map.find_det; eassumption.
-      * apply Map.eq_refl.
-      * reflexivity. }
-    destruct x0 as [updated_context_without_self stepped]; cbn in *.
-    destruct (Map.find_spec updated_context_without_self name); constructor. {
-      intros [m t] C; cbn in *. invert C.
-      eassert (Er : _); [| eassert (Ex : _); [| destruct (SmallStep.det Y0 Er Ex step_in_context) as [D1 D2]]].
-      * intros x' y'. destruct remove_self_from_context as [I R]. cbn in R. rewrite R.
-        destruct (Map.remove_remove I) as [_ R']. cbn in R'. rewrite R'. reflexivity.
-      * eapply Map.find_det; eassumption.
-      * subst. apply not_overwriting_self. eexists. apply D1. eassumption. }
-    cbn. econstructor. { exact Y. } { apply Map.remove_remove. eexists. exact Y. } { exact Y0. }
-    + intros [y F]. apply N in F as [].
-    + apply Map.add_overriding. intros v F. apply N in F as [].
+  - cbn. destruct ownership.
+    + destruct (Map.find_spec context name); constructor; cbn in *.
+    * constructor. { exact Y. } apply Map.remove_remove. eexists. exact Y.
+    * intros [updated_context updated_term] S; cbn in *. invert S. apply N in lookup as [].
+    + destruct (Map.find_spec context name). 2: {
+        constructor. intros [m t] C; cbn in *. invert C. apply N in lookup as []. }
+      destruct (IHfuel (Map.remove name context) x). 3: { constructor. } 2: {
+        constructor. intros [m t] C; cbn in *. invert C. eapply (N (_, _)). eapply SmallStep.eq.
+        * exact step_in_context.
+        * intros x' y'. destruct remove_self_from_context as [I R]. cbn in R. rewrite R.
+          destruct (Map.remove_remove I) as [_ R']. cbn in R'. rewrite R'. reflexivity.
+        * eapply Map.find_det; eassumption.
+        * apply Map.eq_refl.
+        * reflexivity. }
+      destruct x0 as [updated_context_without_self stepped]; cbn in *.
+      destruct (Map.find_spec updated_context_without_self name); constructor. {
+        intros [m t] C; cbn in *. invert C.
+        eassert (Er : _); [| eassert (Ex : _); [| destruct (SmallStep.det Y0 Er Ex step_in_context) as [D1 D2]]].
+        * intros x' y'. destruct remove_self_from_context as [I R]. cbn in R. rewrite R.
+          destruct (Map.remove_remove I) as [_ R']. cbn in R'. rewrite R'. reflexivity.
+        * eapply Map.find_det; eassumption.
+        * subst. apply not_overwriting_self. eexists. apply D1. eassumption. }
+      cbn. econstructor. { exact Y. } { apply Map.remove_remove. eexists. exact Y. } { exact Y0. }
+      * intros [y F]. apply N in F as [].
+      * apply Map.add_overriding. intros v F. apply N in F as [].
   - rewrite step_app. destruct (IHfuel context term1) as [[updated_context updated_function] | |]. 3: { constructor. } {
       constructor. cbn in *. apply SmallStep.ApF. exact Y. }
-    destruct term1 as [| | | | | pattern body_if_match other_cases]; try solve [
+    destruct term1 as [| | | | pattern body_if_match other_cases]; try solve [
       constructor; intros [m t] C; invert C; cbn in *; apply (N (_, _)) in reduce_function as []].
     destruct andb eqn:E. 2: {
       apply Bool.andb_false_iff in E. destruct Unshadow.unshadow_reserve eqn:Eu; constructor.

@@ -9,10 +9,8 @@ From LinearCore Require Import
 
 
 Inductive Term : Term.term -> String.string -> Prop :=
-  | Mov name
-      : Term (Term.Mov name) name
-  | Ref name
-      : Term (Term.Ref name) name
+  | Var name ownership
+      : Term (Term.Var name ownership) name
   | ApF function name (used_in_function : Term function name) argument
       : Term (Term.App function argument) name
   | ApA argument name (used_in_argument : Term argument name) function
@@ -31,7 +29,7 @@ Arguments Term term name.
 
 Fixpoint term t : Map.set :=
   match t with
-  | Term.Mov name | Term.Ref name =>
+  | Term.Var name _ =>
       Map.singleton name tt
   | Term.App function argument =>
       Map.set_union (term function) (term argument)
@@ -47,8 +45,6 @@ Lemma term_spec t
 Proof.
   induction t; cbn in *; intros.
   - split. { intros [v F]. invert F. } intro T. invert T.
-  - split. { intros [v F]. apply Map.find_singleton in F as [-> ->]. constructor. }
-    intro T. invert T. eexists. apply Map.find_singleton. split; reflexivity.
   - split. { intros [v F]. apply Map.find_singleton in F as [-> ->]. constructor. }
     intro T. invert T. eexists. apply Map.find_singleton. split; reflexivity.
   - split.

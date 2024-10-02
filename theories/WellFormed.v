@@ -113,10 +113,8 @@ Qed.
 Inductive AllPatternsIn : Term.term -> Prop :=
   | APCtr ctor
       : AllPatternsIn (Term.Ctr ctor)
-  | APMov name
-      : AllPatternsIn (Term.Mov name)
-  | APRef name
-      : AllPatternsIn (Term.Ref name)
+  | APMov name ownership
+      : AllPatternsIn (Term.Var name ownership)
   | APApp {function} (APf : AllPatternsIn function) {argument} (APa : AllPatternsIn argument)
       : AllPatternsIn (Term.App function argument)
   | APFor {type} (APt : AllPatternsIn type) {body} (APb : AllPatternsIn body) variable
@@ -130,8 +128,7 @@ Arguments AllPatternsIn t.
 Fixpoint all_patterns_in t :=
   match t with
   | Term.Ctr _
-  | Term.Mov _
-  | Term.Ref _ =>
+  | Term.Var _ _ =>
       true
   | Term.App t1 t2
   | Term.For _ t1 t2 =>

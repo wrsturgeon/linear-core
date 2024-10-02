@@ -16,11 +16,9 @@ From LinearCore Require Import
 Fixpoint unshadow_acc (acc : Map.to String.string) (reserved : Map.set) t :=
   match t with
   | Term.Ctr ctor => Some (reserved, Term.Ctr ctor)
-  | Term.Mov k =>
+  | Term.Var k ownership =>
       (* Have to supply a plan for any free variables (or they have to have been bound & added to the plan): *)
-      match Map.find acc k with None => None | Some v => Some (reserved, Term.Mov v) end
-  | Term.Ref k =>
-      match Map.find acc k with None => None | Some v => Some (reserved, Term.Ref v) end
+      match Map.find acc k with None => None | Some v => Some (reserved, Term.Var v ownership) end
   | Term.App f a =>
       match unshadow_acc acc reserved f with None => None | Some (reserved, f') =>
         match unshadow_acc acc reserved a with None => None | Some (reserved, a') =>
@@ -79,9 +77,6 @@ Proof.
   subst. rename t2 into t. generalize dependent r2. generalize dependent r1.
   generalize dependent a2. generalize dependent a1. { induction t; intros; cbn in *.
   - constructor; assumption.
-  - unfold unshadow_acc. destruct (Map.find_spec a1 name).
-    + apply Ea in Y. apply Map.find_iff in Y. rewrite Y. constructor. exact Er.
-    + destruct (Map.find_spec a2 name). { apply Ea in Y. apply N in Y as []. } constructor.
   - unfold unshadow_acc. destruct (Map.find_spec a1 name).
     + apply Ea in Y. apply Map.find_iff in Y. rewrite Y. constructor. exact Er.
     + destruct (Map.find_spec a2 name). { apply Ea in Y. apply N in Y as []. } constructor.
@@ -173,9 +168,6 @@ Proof.
   - destruct (Map.find_spec acc name) as [name' F | N]; invert E.
     split. { intro I. right. exact I. }
     intros [B | I]. { invert B. } exact I.
-  - destruct (Map.find_spec acc name) as [name' F | N]; invert E.
-    split. { intro I. right. exact I. }
-    intros [B | I]. { invert B. } exact I.
   - destruct unshadow_acc as [[r1 t1] |] eqn:E1 in E. 2: { discriminate E. }
     destruct unshadow_acc as [[r2 t2] |] eqn:E2 in E; invert E. eapply IHterm1 in E1; try eassumption.
     eapply IHterm2 in E2; try eassumption. 2: { intros. apply E1. right. eapply prev. exact Fa. } split.
@@ -229,9 +221,6 @@ Lemma wf_spec acc reserved t
 Proof.
   generalize dependent reserved. generalize dependent acc. induction t; intros; cbn in *.
   - constructor. split; intros. { constructor. } invert U.
-  - destruct (Map.find_spec acc name); constructor.
-    + split; intros. { constructor. } invert U. eexists. exact Y.
-    + intros _ [_ C]. edestruct C. { constructor. } apply N in H as [].
   - destruct (Map.find_spec acc name); constructor.
     + split; intros. { constructor. } invert U. eexists. exact Y.
     + intros _ [_ C]. edestruct C. { constructor. } apply N in H as [].
@@ -295,7 +284,6 @@ Proof.
   generalize dependent reserved. generalize dependent acc. induction term; intros; cbn in *.
   - invert E. invert U.
   - destruct (Map.find_spec acc name); invert E. invert U. eexists. exact Y.
-  - destruct (Map.find_spec acc name); invert E. invert U. eexists. exact Y.
   - destruct unshadow_acc as [[r1 t1] |] eqn:E1 in E. 2: { discriminate E. }
     destruct unshadow_acc as [[r2 t2] |] eqn:E2 in E; invert E.
     invert U. { eapply IHterm1. { exact prev. } { exact E1. } { exact I. } exact used_in_function. }
@@ -336,7 +324,6 @@ Proof.
   generalize dependent reserved. generalize dependent acc. induction term; intros; cbn in *.
   - invert E. invert B.
   - destruct (Map.find_spec acc name); invert E. invert B.
-  - destruct (Map.find_spec acc name); invert E. invert B.
   - destruct unshadow_acc as [[r1 t1] |] eqn:E1 in E. 2: { discriminate E. }
     destruct unshadow_acc as [[r2 t2] |] eqn:E2 in E; invert E.
     invert B. { eapply IHterm1. { exact prev. } { exact E1. } { exact I. } exact bound_in_function. }
@@ -375,7 +362,6 @@ Proof.
   generalize dependent x. generalize dependent renamed. generalize dependent reserved'.
   generalize dependent reserved. generalize dependent acc. induction term; intros; cbn in *.
   - invert E. invert U.
-  - destruct (Map.find_spec acc name); invert E. invert U. eapply prev. exact Y.
   - destruct (Map.find_spec acc name); invert E. invert U. eapply prev. exact Y.
   - destruct unshadow_acc as [[r1 t1] |] eqn:E1 in E. 2: { discriminate E. }
     destruct unshadow_acc as [[r2 t2] |] eqn:E2 in E; invert E.
@@ -419,10 +405,8 @@ Qed.
 Inductive Unshadowed : Term.term -> Prop :=
   | Ctr ctor
       : Unshadowed (Term.Ctr ctor)
-  | Mov name
-      : Unshadowed (Term.Mov name)
-  | Ref name
-      : Unshadowed (Term.Ref name)
+  | Var name ownership
+      : Unshadowed (Term.Var name ownership)
   | App
       {function} (Uf : Unshadowed function)
       {argument} (Ua : Unshadowed argument)
@@ -455,7 +439,6 @@ Proof.
   generalize dependent renamed. generalize dependent reserved'.
   generalize dependent reserved. generalize dependent acc. induction t; intros; cbn in *.
   - invert E. constructor.
-  - destruct (Map.find_spec acc name); cbn in E; invert E; constructor.
   - destruct (Map.find_spec acc name); cbn in E; invert E; constructor.
   - destruct unshadow_acc as [[reserved1 renamed1] |] eqn:E1 in E. 2: { discriminate E. }
     destruct unshadow_acc as [[reserved2 renamed2] |] eqn:E2 in E; invert E.
@@ -524,8 +507,7 @@ Fixpoint unshadowed_acc t :=
   match t with
   | Term.Ctr _ =>
       Some (Map.empty, Map.empty)
-  | Term.Mov name
-  | Term.Ref name =>
+  | Term.Var name _ =>
       Some (Map.empty, Map.singleton name tt)
   | Term.App function argument =>
       match unshadowed_acc function with None => None | Some (bound_in_function, used_in_function) =>
@@ -573,10 +555,6 @@ Proof.
   - invert E. split; intros.
     + split. { intro I. apply Map.empty_empty in I as []. } intro B. invert B.
     + split. { intro I. apply Map.empty_empty in I as []. } intro B. invert B.
-  - invert E. split; intros.
-    + split. { intro I. apply Map.empty_empty in I as []. } intro B. invert B.
-    + split. { intro I. apply Map.in_singleton in I as ->. constructor. }
-      intro U. invert U. apply Map.in_singleton. reflexivity.
   - invert E. split; intros.
     + split. { intro I. apply Map.empty_empty in I as []. } intro B. invert B.
     + split. { intro I. apply Map.in_singleton in I as ->. constructor. }
@@ -652,7 +630,6 @@ Lemma unshadowed_spec t
   : Reflect.Bool (Unshadowed t) (unshadowed t).
 Proof.
   induction t; cbn in *.
-  - constructor. constructor.
   - constructor. constructor.
   - constructor. constructor.
   - destruct unshadowed_acc as [[bound_in_function used_in_function] |] eqn:Ef; invert IHt1. 2: {
