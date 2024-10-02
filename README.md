@@ -37,11 +37,6 @@ Constructors:
   | UserDefined <name>
 ```
 
-Non-empty strings:
-```ebnf
-<name> ::= <character> <string>
-```
-
 
 
 ## Terms
