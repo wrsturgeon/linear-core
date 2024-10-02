@@ -16,9 +16,18 @@ From LinearCore Require Import
 
 From Coq Require Import String.
 Definition to_string (opt : option (Context.context * Term.term)) : string :=
-  match opt with
-  | Some (ctx, t) => Term.to_string t ++ " with " ++ Context.to_string ctx
-  | None => "<abort>"
+  match opt with None => "<abort>" | Some (context, term) =>
+    let '(line_length, format_term) := Term.to_string_configurable_acc Term.default_line_length 0 term in
+    let term_formatted := format_term Term.default_newline_str Term.default_indent_str in
+    let dividing_line_length :=
+      match line_length with
+      | Term.Overflow => Term.default_line_length
+      | Term.OneLiner n => n
+      end in
+    let dividing_line := Term.repeat dividing_line_length "=" in
+    (*let dividing_line := Term.repeat Term.default_line_length "=" in*)
+    Map.fold (fun k v acc => (k ++ " |-> " ++ Term.to_string v ++ Term.default_newline_str ++ acc)%string)
+    (String.append dividing_line $ String.append Term.default_newline_str term_formatted) context
   end.
 
 

@@ -200,6 +200,9 @@
                 let rec interpret context t =
                   let stepped = Linear_core.SmallStepFunction.step context t in
                   let formatted = Linear_core.SmallStepFunction.to_string stepped in
+                  print_endline "";
+                  print_endline "";
+                  print_endline "";
                   print_endline formatted;
                   match stepped with None -> None | Some (context', t') -> interpret context' t'
 
@@ -224,7 +227,6 @@
                   let stringified = Linear_core.Term.to_string term in
                   print_endline "Original term:";
                   print_endline stringified;
-                  print_endline "";
                   interpret Linear_core.Map.empty term
               '';
               uname = "example_interpreter";
