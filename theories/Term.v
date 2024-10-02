@@ -88,5 +88,5 @@ Fixpoint to_string t : string :=
   | Var name ownership => if Ownership.owned ownership then name else ("&" ++ name)
   | App function argument => "(" ++ to_string function ++ ") (" ++ to_string argument ++ ")"
   | For variable type body => "forall " ++ variable ++ ": " ++ to_string type ++ ", " ++ to_string body
-  | Cas pattern body_if_match other_cases => "if match " ++ Pattern.to_string pattern ++ " then " ++ to_string body_if_match ++ " else " ++ to_string other_cases
+  | Cas pattern body_if_match other_cases => "try match " ++ Pattern.to_string pattern ++ " in " ++ to_string body_if_match ++ " else " ++ to_string other_cases
   end.

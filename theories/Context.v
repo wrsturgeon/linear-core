@@ -101,7 +101,7 @@ Qed.
 
 From Coq Require Import String.
 
-Definition format_pair kv : string := fst kv ++ " -> " ++ Term.to_string $ snd kv.
+Definition format_pair kv : string := fst kv ++ " -> (" ++ (Term.to_string $ snd kv) ++ "); ".
 
 Definition to_string ctx : string :=
-  "{ " ++ String.concat "; " (List.map format_pair $ MapCore.bindings ctx) ++ "}".
+  "{ " ++ List.fold_right String.append String.EmptyString (List.map format_pair $ MapCore.bindings ctx) ++ "}".

@@ -184,6 +184,65 @@
           context = self.lib.context-with-versions { inherit pkgs; };
           coq-only = self.lib.coq-with-versions { inherit pkgs; };
           default = self.lib.with-versions { inherit pkgs; };
+          example-interpreter =
+            with self.packages.${system}.context;
+            ocaml-pkgs.buildDunePackage {
+              pname = "example_interpreter";
+              version = "none";
+              src = self.packages.${system}.example-interpreter-src;
+              propagatedBuildInputs = [ (self.lib.with-context self.packages.${system}.context) ];
+            };
+          example-interpreter-src =
+            let
+              main-ml = ''
+                open Linear_core
+
+                let rec interpret context t =
+                  let stepped = Linear_core.SmallStepFunction.step context t in
+                  let formatted = Linear_core.SmallStepFunction.to_string stepped in
+                  print_endline formatted;
+                  match stepped with None -> None | Some (context', t') -> interpret context' t'
+
+                let _ =
+                  let err = Linear_core.Term.Ctr (Linear_core.Constructor.Builtin Linear_core.Constructor.Error) in
+                  let mov = (fun x -> Linear_core.Term.Var (x, Linear_core.Ownership.Owned)) in
+                  let term =
+                    Linear_core.Term.App (
+                      Linear_core.Term.Cas (
+                        Linear_core.Pattern.Nam "x",
+                        mov "x",
+                        Linear_core.Term.Cas (
+                          Linear_core.Pattern.Nam "x",
+                          mov "x",
+                          mov "x")),
+                      Linear_core.Term.App (
+                        Linear_core.Term.Cas (
+                          Linear_core.Pattern.Nam "x",
+                          err,
+                          err),
+                        err)) in
+                  let stringified = Linear_core.Term.to_string term in
+                  print_endline "Original term:";
+                  print_endline stringified;
+                  print_endline "";
+                  interpret Linear_core.Map.empty term
+              '';
+              uname = "example_interpreter";
+            in
+            pkgs.stdenvNoCC.mkDerivation {
+              name = "example-interpreter-src";
+              src = nix-filter {
+                root = ./.;
+                include = [ ];
+              };
+              buildInputs = with self.packages.${system}.context; [ dune ];
+              buildPhase = ''
+                dune init proj ${uname} ./${uname}
+                sed -i 's/libraries/libraries linear_core/g' ${uname}/bin/dune
+                echo ${pkgs.lib.strings.escapeShellArg main-ml} > ${uname}/bin/main.ml
+              '';
+              installPhase = "cp -Lr ./${uname} $out";
+            };
           example-unshadow =
             with self.packages.${system}.context;
             ocaml-pkgs.buildDunePackage {
@@ -276,6 +335,7 @@
           );
           test-syntax = checker {
             buildPhase = ''
+              # if ${rg} 'Admitted|Axiom|Conjecture|Parameter|Hypothesis|Hypotheses|Variable' -g '*.v'; then
               if ${rg} 'Admitted|Axiom|Conjecture|Parameter|Hypothesis|Hypotheses|Variable' -g '*.v' -g '!theories/NewNames.v'; then
                 echo
                 echo 'SYNTAX ERROR: unverified assumption (above)'
