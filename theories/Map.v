@@ -552,6 +552,16 @@ Lemma remove_det {T k1} {m1 m1' : to T} (R1 : Remove k1 m1 m1')
   : Eq m1' m2'.
 Proof. eapply remove_if_present_det. { apply R1. } { exact Ek. } { exact Em. } apply R2. Qed.
 
+Lemma remove_eq {T k1} {m1 m1' : to T} (R1 : Remove k1 m1 m1')
+  {k2} (Ek : k1 = k2)
+  {m2} (Em : Eq m1 m2)
+  {m2'} (Em' : Eq m1' m2')
+  : Remove k2 m2 m2'.
+Proof.
+  subst. split. { eapply in_eq. { apply eq_sym. exact Em. } apply R1. }
+  eapply remove_if_present_eq. { apply R1. } { reflexivity. } { exact Em. } exact Em'.
+Qed.
+
 Lemma in_remove {T k} {m m' : to T} (R : Remove k m m') x
   : In m' x <-> (x <> k /\ In m x).
 Proof. apply in_remove_if_present. apply R. Qed.

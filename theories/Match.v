@@ -3,11 +3,13 @@ From LinearCore Require
   Context
   Map
   Pattern
+  Shape
   Term
   Unshadow
   WellFormed
   .
 From LinearCore Require Import
+  DollarSign
   Invert
   .
 
@@ -273,7 +275,7 @@ Variant MoveOrReference (context : Context.context) : Pattern.move_or_reference 
   | Mov strict scrutinee context_with_matches (S : Strict context strict scrutinee context_with_matches)
       : MoveOrReference context (Pattern.Mov strict) scrutinee context_with_matches
   | Ref
-      name scrutinee (lookup : Map.Find context name scrutinee)
+      {name scrutinee} (follow_references : Context.FollowReferences context (Term.Ref name) scrutinee)
       strict old_context_with_matches cleaved (S : StrictRef context strict scrutinee cleaved old_context_with_matches)
       context_with_matches (OW : Map.Overwrite name cleaved old_context_with_matches context_with_matches)
       : MoveOrReference context (Pattern.Ref strict) (Term.Ref name) context_with_matches
@@ -292,7 +294,10 @@ Example match_referenced_application ctor arg argn name (N : argn <> name)
     MoveOrReference context pattern (Term.Ref name) context_with_matches.
 Proof.
   cbn. econstructor.
-  - apply Map.find_overriding_add. left. split; reflexivity.
+  - econstructor.
+    + apply Map.find_overriding_add. left. split; reflexivity.
+    + apply Map.remove_remove. apply Map.in_overriding_add. left. reflexivity.
+    + constructor. { intros ? D. discriminate D. } reflexivity.
   - econstructor.
     + constructor. intros x y. rewrite Map.find_singleton. rewrite Map.find_overriding_add.
       split. { intros [[-> ->] | [N' F]]. { split; reflexivity. } invert F. }
@@ -324,7 +329,10 @@ Example match_referenced_application_deep ctor arg1 arg2 arg1n arg2n name
     MoveOrReference context pattern (Term.Ref name) context_with_matches.
 Proof.
   cbn. econstructor.
-  - apply Map.find_overriding_add. left. split; reflexivity.
+  - econstructor.
+    + apply Map.find_overriding_add. left. split; reflexivity.
+    + apply Map.remove_remove. apply Map.in_overriding_add. left. reflexivity.
+    + constructor. { intros ? D. discriminate D. } reflexivity.
   - econstructor.
     + econstructor.
       * constructor. intros x y. rewrite Map.find_singleton. rewrite Map.find_overriding_add.
@@ -353,18 +361,18 @@ Qed.
 
 Definition move_or_reference context pattern scrutinee :=
   match pattern with
-  | Pattern.Mov s => strict context s scrutinee
+  | Pattern.Mov s =>
+      match strict context s scrutinee with
+      | None => None
+      | Some context_with_matches => Some context_with_matches
+      end
   | Pattern.Ref s =>
       match scrutinee with
       | Term.Ref name =>
-          match Map.find context name with
-          | None => None
-          | Some term =>
-              match strict_ref context s term with
-              | None => None
-              | Some (cleaved, context_with_matches) =>
-                  Some (Map.overwrite name cleaved context_with_matches)
-              end
+          match Context.follow_references context scrutinee with None => None | Some term =>
+            match strict_ref context s term with None => None | Some (cleaved, context_with_matches) =>
+              Some $ Map.overwrite name cleaved context_with_matches
+            end
           end
       | _ => None
       end
@@ -380,8 +388,11 @@ Lemma move_or_reference_det
 Proof.
   subst. invert S1; invert S2.
   - eapply strict_det; try reflexivity; eassumption.
-  - apply Ec in lookup0. edestruct (Map.find_det lookup lookup0).
-    destruct (strict_ref_det S Ec eq_refl eq_refl S0) as [<- Eoc].
+  - invert follow_references. 2: { contradiction (N name). reflexivity. }
+    invert follow_references0. 2: { contradiction (N name). reflexivity. }
+    assert (Ew := Map.remove_det R eq_refl Ec R0). apply Ec in F0. destruct (Map.find_det F F0).
+    destruct (Context.follow_references_det transitive Ew eq_refl transitive0).
+    destruct (strict_ref_det S Ec eq_refl eq_refl S0) as [-> Eo].
     eapply Map.overwrite_det; try reflexivity; eassumption.
 Qed.
 
@@ -395,7 +406,8 @@ Lemma move_or_reference_eq
 Proof.
   invert MR.
   - constructor. eapply strict_eq; try reflexivity; eassumption.
-  - econstructor. { apply Ec. exact lookup. }
+  - econstructor.
+    + eapply Context.follow_references_eq. { exact follow_references. } { exact Ec. } { reflexivity. } reflexivity.
     + eapply strict_ref_eq; try reflexivity; try eassumption. apply Map.eq_refl.
     + eapply Map.overwrite_eq; try reflexivity; try eassumption. apply Map.eq_refl.
 Qed.
@@ -418,11 +430,12 @@ Proof.
   - cbn. destruct (strict_spec context strict0 scrutinee); constructor. { constructor. exact Y. }
     intros x MR. invert MR. apply N in S as [].
   - destruct scrutinee; try (constructor; intros m C; invert C).
-    destruct (Map.find_spec context name). 2: { constructor. intros m C. invert C. apply N in lookup as []. }
-    destruct (strict_ref_spec context strict0 x). 2: {
-      constructor. intros m C. invert C. destruct (Map.find_det Y lookup). apply (N (_, _)) in S as []. }
-    destruct x0 as [t ctx]; cbn in *. constructor. econstructor; try eassumption.
-    apply Map.overwrite_overwrite. eapply in_strict_ref. { exact Y0. } right. eexists. exact Y.
+    destruct (Context.follow_references_spec context $ Term.Ref name). 2: {
+      constructor. intros m C. invert C. apply N in follow_references as []. }
+    destruct (strict_ref_spec context strict0 x) as [[cleaved context_with_matches] |]. 2: { constructor. intros m C. invert C.
+      destruct (Context.follow_references_det Y (Map.eq_refl _) eq_refl follow_references). apply (N (_, _)) in S as []. }
+    cbn in *. constructor. econstructor; try eassumption. apply Map.overwrite_overwrite.
+    invert Y. 2: { contradiction (N name). reflexivity. } eapply in_strict_ref. { exact Y0. } right. eexists. exact F.
 Qed.
 
 Variant CompatibleMoveOrReference context : Pattern.move_or_reference -> Prop :=
@@ -594,7 +607,8 @@ Proof.
   - eapply unshadow_strict. { exact Ut. } { exact Uc. } exact S.
   - eapply unshadow_strict_ref in S as [U FA].
     + cbn. intros. apply OW in F as [[-> ->] | [N F]]. { exact U. } eapply FA. exact F.
-    + eapply Uc. exact lookup.
+    + destruct (Context.follow_maps_to_last follow_references) as [second_to_last F].
+      invert follow_references. 2: { contradiction (N name). reflexivity. } eapply Uc. exact F.
     + exact Uc.
 Qed.
 
@@ -606,4 +620,32 @@ Proof.
   cbn. intros. invert M.
   - apply S in F. destruct F as [[-> ->] | F]. { exact Ut. } eapply Uc. exact F.
   - eapply unshadow_move_or_reference. 3: { exact move_or_reference_matched. } { exact Ut. } { exact Uc. } exact F.
+Qed.
+
+
+
+Lemma strict_shaped {context pattern scrutinee context_with_matches}
+  (M : Strict context pattern scrutinee context_with_matches)
+  : Shape.ShapeOf scrutinee Shape.Resource.
+Proof. induction M; constructor. exact IHM. Qed.
+
+Lemma strict_ref_shaped {context pattern scrutinee cleaved context_with_matches}
+  (M : StrictRef context pattern scrutinee cleaved context_with_matches)
+  : Shape.ShapeOf scrutinee Shape.Resource.
+Proof. induction M; constructor. exact IHM. Qed.
+
+Lemma follow_references_shaped {context term followed} (FR : Context.FollowReferences context term followed)
+  (S : Shape.ShapeOf followed Shape.Resource)
+  : Shape.ShapeOrRef context term Shape.Resource.
+Proof.
+  generalize dependent S. induction FR; intros. 2: { subst. apply Shape.or_ref. exact S. }
+  econstructor. { exact F. } { exact R. } apply IHFR. exact S.
+Qed.
+
+Lemma move_or_reference_shape_or_ref {context pattern scrutinee context_with_matches}
+  (M : MoveOrReference context pattern scrutinee context_with_matches)
+  : Shape.ShapeOrRef context scrutinee Shape.Resource.
+Proof.
+  invert M. { apply Shape.or_ref. eapply strict_shaped. exact S. }
+  assert (SO := strict_ref_shaped S). eapply follow_references_shaped. { exact follow_references. } exact SO.
 Qed.
