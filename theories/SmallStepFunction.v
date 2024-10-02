@@ -17,7 +17,7 @@ From LinearCore Require Import
 From Coq Require Import String.
 Definition to_string (opt : option (Context.context * Term.term)) : string :=
   match opt with None => "<abort>" | Some (context, term) =>
-    let '(line_length, format_term) := Term.to_string_configurable_acc Term.default_line_length 0 term in
+    let '(line_length, format_term, _, _) := Term.to_string_configurable_acc Term.default_line_length 0 term in
     let term_formatted := format_term Term.default_newline_str Term.default_indent_str in
     let dividing_line_length :=
       match line_length with
