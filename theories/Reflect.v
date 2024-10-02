@@ -1,5 +1,4 @@
 From LinearCore Require Import
-  Halt
   Invert
   .
 
@@ -19,17 +18,6 @@ Variant Option {T} (P : T -> Prop) : option T -> Prop :=
       : Option P (Some x)
   | N (N : forall x, ~P x)
       : Option P None
-  .
-
-
-
-Variant Halt {T} (P : T -> Prop) : Halt.halt T -> Prop :=
-  | R x (Y : P x)
-      : Halt P (Halt.Return x)
-  | E (N : forall x, ~P x)
-      : Halt P Halt.Exit
-  | O
-      : Halt P Halt.OutOfFuel
   .
 
 

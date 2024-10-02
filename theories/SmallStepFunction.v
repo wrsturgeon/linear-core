@@ -1,6 +1,7 @@
+From Equations Require Import
+  Equations
+  .
 From LinearCore Require
-  Fuel
-  Halt
   SmallStep
   Term
   Unshadow
@@ -14,154 +15,88 @@ From LinearCore Require Import
 
 
 From Coq Require Import String.
-Definition to_string (h : Halt.halt (Context.context * Term.term)) : string :=
-  match h with
-  | Halt.Return (ctx, t) => Term.to_string t ++ " with " ++ Context.to_string ctx
-  | Halt.Exit => "<abort>"
-  | Halt.OutOfFuel => "<out of time>"
+Definition to_string (opt : option (Context.context * Term.term)) : string :=
+  match opt with
+  | Some (ctx, t) => Term.to_string t ++ " with " ++ Context.to_string ctx
+  | None => "<abort>"
   end.
+
+
 
 (* TODO: Much later, instead of continually checking all bound and used terms in `unshadowed`,
  * consider keeping a running tally of all bound and used terms, then
  * incrementally updating it with each step, to cache most of the work. *)
 
-Fixpoint step (fuel : Fuel.fuel) (context : Context.context) (term : Term.term) : Halt.halt (Context.context * Term.term) :=
-  VerbosePrint.format to_string $
-  match fuel with Fuel.Stop => Halt.OutOfFuel | Fuel.Continue fuel =>
-    match term with
-    | Term.Var name Ownership.Owned =>
-        match Map.find context name with
-        | None => Halt.Exit
-        | Some updated_term => Halt.Return (Map.remove name context, updated_term)
+Equations step (context : Context.context) (term : Term.term)
+  : option (Context.context * Term.term) by wf (Nat.add (Term.nodes term) $
+    List.fold_right (fun kv => Nat.add $ Term.nodes $ snd kv) 0 $ MapCore.bindings context) lt :=
+  step context (Term.Var name Ownership.Owned) :=
+    match Map.find context name with None => None | Some updated_term =>
+      Some (Map.remove name context, updated_term)
+    end;
+  step context (Term.Var self Ownership.Referenced) with Map.found_dec context self => {
+  | Map.NotFound => None
+  | @Map.Found looked_up _ =>
+      let context_without_self := Map.remove self context in
+      match step context_without_self looked_up with None => None | Some (updated_context_without_self, stepped) =>
+        match Map.find updated_context_without_self self with Some _ => None | None =>
+          Some (Map.overriding_add self stepped updated_context_without_self, Term.Var self Ownership.Referenced)
         end
-    | Term.Var self Ownership.Referenced =>
-        match Map.find context self with None => Halt.Exit | Some looked_up =>
-          let context_without_self := Map.remove self context in
-          match step fuel context_without_self looked_up with
-          | Halt.Return (updated_context_without_self, stepped) =>
-            match Map.find updated_context_without_self self with Some _ => Halt.Exit | None =>
-              Halt.Return (Map.overriding_add self stepped updated_context_without_self, Term.Var self Ownership.Referenced)
-            end
-          | other => other
-          end
-        end
-    | Term.App function argument =>
-        match step fuel context function with
-        | Halt.OutOfFuel => Halt.OutOfFuel
-        | Halt.Return (updated_context, updated_function) =>
-            Halt.Return (updated_context, Term.App updated_function argument)
-        | Halt.Exit =>
-            match function with
-            | Term.Cas pattern body_if_match other_cases =>
-                if andb (Match.compatible context pattern) (Unshadow.unshadowed term) then
-                  match pattern with
-                  | Pattern.Nam name => Halt.Return (Map.overriding_add name argument context, body_if_match)
-                  | Pattern.Pat move_or_reference =>
-                      match Shape.shape_or_ref fuel context argument with
-                      | Halt.OutOfFuel => Halt.OutOfFuel
-                      | Halt.Return _ =>
-                          match Match.move_or_reference context move_or_reference argument with
-                          | None => Halt.Return (context, Term.App other_cases argument)
-                          | Some context_with_matches => Halt.Return (context_with_matches, body_if_match)
-                          end
-                      | Halt.Exit =>
-                          match step fuel context argument with
-                          | Halt.OutOfFuel => Halt.OutOfFuel
-                          | Halt.Exit => Halt.Exit
-                          | Halt.Return (updated_context, reduced_scrutinee) =>
-                              Halt.Return (updated_context, Term.App (Term.Cas pattern body_if_match other_cases) reduced_scrutinee)
-                          end
-                      end
-                  end
-                else
-                  match Unshadow.unshadow_reserve (Map.domain context) term with
-                  | None => Halt.Exit
-                  | Some renamed => Halt.Return (context, renamed)
-                  end
-            | _ => Halt.Exit
-            end
-        end
-    | _ => Halt.Exit
-    end
-  end.
-
-
-
-Lemma step_app fuel context function argument
-  : step (Fuel.Continue fuel) context (Term.App function argument) =
-    match step fuel context function with
-    | Halt.OutOfFuel => Halt.OutOfFuel
-    | Halt.Return (updated_context, updated_function) =>
-        Halt.Return (updated_context, Term.App updated_function argument)
-    | Halt.Exit =>
+      end };
+  step context (Term.App function argument) :=
+    match step context function with
+    | Some (updated_context, updated_function) => Some (updated_context, Term.App updated_function argument)
+    | None =>
         match function with
-        | Term.Cas pattern body_if_match other_cases =>
+        | Term.Cas pattern body_if_match other_cases => (* TODO: simplify `Unshadow.unshadowed` below *)
             if andb (Match.compatible context pattern) (Unshadow.unshadowed $ Term.App function argument) then
               match pattern with
-              | Pattern.Nam name => Halt.Return (Map.overriding_add name argument context, body_if_match)
+              | Pattern.Nam name => Some (Map.overriding_add name argument context, body_if_match)
               | Pattern.Pat move_or_reference =>
-                  match Shape.shape_or_ref fuel context argument with
-                  | Halt.OutOfFuel => Halt.OutOfFuel
-                  | Halt.Return _ =>
+                  match Shape.shape_or_ref context argument with
+                  | Some _ =>
                       match Match.move_or_reference context move_or_reference argument with
-                      | None => Halt.Return (context, Term.App other_cases argument)
-                      | Some context_with_matches => Halt.Return (context_with_matches, body_if_match)
+                      | None => Some (context, Term.App other_cases argument)
+                      | Some context_with_matches => Some (context_with_matches, body_if_match)
                       end
-                  | Halt.Exit =>
-                      match step fuel context argument with
-                      | Halt.OutOfFuel => Halt.OutOfFuel
-                      | Halt.Exit => Halt.Exit
-                      | Halt.Return (updated_context, reduced_scrutinee) =>
-                          Halt.Return (updated_context, Term.App (Term.Cas pattern body_if_match other_cases) reduced_scrutinee)
+                  | None =>
+                      match step context argument with None => None | Some (updated_context, reduced_scrutinee) =>
+                        Some (updated_context, Term.App (Term.Cas pattern body_if_match other_cases) reduced_scrutinee)
                       end
                   end
               end
-            else
-              match Unshadow.unshadow_reserve (Map.domain context) $ Term.App function argument with
-              | None => Halt.Exit
-              | Some renamed => Halt.Return (context, renamed)
-              end
-        | _ => Halt.Exit
+            else (* TODO: simplify `Unshadow.unshadowed` below *)
+              option_map (pair context) $ Unshadow.unshadow_reserve (Map.domain context) $ Term.App function argument
+        | _ => None
         end
-    end.
-Proof. reflexivity. Qed.
+    end;
+  step _ _ := None.
+Next Obligation.
+  clear step. assert (BS := Map.bindings_remove_split Y). apply MapCore.bindings_spec1 in Y.
+  destruct BS as [bl [br [-> ->]]]; clear context Y. repeat rewrite List.fold_right_app. cbn.
+  induction bl as [| [k v] tail IH]; cbn in *. { apply PeanoNat.Nat.lt_succ_diag_r. }
+  rewrite PeanoNat.Nat.add_assoc. rewrite (PeanoNat.Nat.add_comm $ Term.nodes looked_up). rewrite plus_n_Sm.
+  rewrite <- PeanoNat.Nat.add_assoc. apply PeanoNat.Nat.add_lt_mono_l. exact IH. Qed.
+Next Obligation.
+  rewrite <- PeanoNat.Nat.add_assoc. rewrite plus_n_Sm. apply PeanoNat.Nat.add_lt_mono_l.
+  rewrite <- PeanoNat.Nat.add_succ_l. apply PeanoNat.Nat.lt_add_pos_l. apply PeanoNat.Nat.lt_0_succ. Qed.
+Next Obligation.
+  rewrite (PeanoNat.Nat.add_comm $ Term.nodes function).
+  rewrite <- PeanoNat.Nat.add_assoc. rewrite plus_n_Sm. apply PeanoNat.Nat.add_lt_mono_l.
+  rewrite <- PeanoNat.Nat.add_succ_l. apply PeanoNat.Nat.lt_add_pos_l. apply PeanoNat.Nat.lt_0_succ. Qed.
+Fail Next Obligation.
 
 
 
-Theorem spec fuel context term
-  : Reflect.Halt (fun pair => SmallStep.Step context term (fst pair) (snd pair)) (step fuel context term).
+Theorem spec context term
+  : Reflect.Option (fun pair => SmallStep.Step context term (fst pair) (snd pair)) (step context term).
 Proof.
-  generalize dependent term. generalize dependent context. induction fuel. { constructor. }
-  destruct term; try solve [constructor; intros [updated_context updated_term] S; invert S].
-  - cbn. destruct ownership.
-    + destruct (Map.find_spec context name); constructor; cbn in *.
-    * constructor. { exact Y. } apply Map.remove_remove. eexists. exact Y.
-    * intros [updated_context updated_term] S; cbn in *. invert S. apply N in lookup as [].
-    + destruct (Map.find_spec context name). 2: {
-        constructor. intros [m t] C; cbn in *. invert C. apply N in lookup as []. }
-      destruct (IHfuel (Map.remove name context) x). 3: { constructor. } 2: {
-        constructor. intros [m t] C; cbn in *. invert C. eapply (N (_, _)). eapply SmallStep.eq.
-        * exact step_in_context.
-        * intros x' y'. destruct remove_self_from_context as [I R]. cbn in R. rewrite R.
-          destruct (Map.remove_remove I) as [_ R']. cbn in R'. rewrite R'. reflexivity.
-        * eapply Map.find_det; eassumption.
-        * apply Map.eq_refl.
-        * reflexivity. }
-      destruct x0 as [updated_context_without_self stepped]; cbn in *.
-      destruct (Map.find_spec updated_context_without_self name); constructor. {
-        intros [m t] C; cbn in *. invert C.
-        eassert (Er : _); [| eassert (Ex : _); [| destruct (SmallStep.det Y0 Er Ex step_in_context) as [D1 D2]]].
-        * intros x' y'. destruct remove_self_from_context as [I R]. cbn in R. rewrite R.
-          destruct (Map.remove_remove I) as [_ R']. cbn in R'. rewrite R'. reflexivity.
-        * eapply Map.find_det; eassumption.
-        * subst. apply not_overwriting_self. eexists. apply D1. eassumption. }
-      cbn. econstructor. { exact Y. } { apply Map.remove_remove. eexists. exact Y. } { exact Y0. }
-      * intros [y F]. apply N in F as [].
-      * apply Map.add_overriding. intros v F. apply N in F as [].
-  - rewrite step_app. destruct (IHfuel context term1) as [[updated_context updated_function] | |]. 3: { constructor. } {
-      constructor. cbn in *. apply SmallStep.ApF. exact Y. }
-    destruct term1 as [| | | | pattern body_if_match other_cases]; try solve [
-      constructor; intros [m t] C; invert C; cbn in *; apply (N (_, _)) in reduce_function as []].
+  funelim (step context term); try solve [constructor; intros [] S; invert S].
+  - destruct (Map.find_spec context name); constructor; cbn in *.
+    + constructor. { exact Y. } apply Map.remove_remove. eexists. exact Y.
+    + intros [updated_context updated_term] S; cbn in *. invert S. apply N in lookup as [].
+  - clear Heqcall. destruct H as [[updated_context updated_function] |]. { constructor. cbn in *. constructor. exact Y. }
+    destruct function; try solve [constructor; intros [c t] S; invert S; cbn in *; apply (N (_, _)) in reduce_function as []].
     destruct andb eqn:E. 2: {
       apply Bool.andb_false_iff in E. destruct Unshadow.unshadow_reserve eqn:Eu; constructor.
       * cbn. eapply SmallStep.ApR. 3: { exact Eu. } 2: { apply Map.domain_domain. } 2: { apply Map.eq_refl. }
@@ -174,17 +109,17 @@ Proof.
           apply (N (_, _)) in reduce_function as []. }
         assert (Ed : Map.Eq (Map.domain context) context_domain). {
           eapply Map.domain_det. { apply Map.domain_domain. } 2: { exact D. } apply Map.eq_refl. }
-        destruct (Unshadow.det_reserve Ed (@eq_refl _ $ Term.App (Term.Cas pattern body_if_match other_cases) term2)).
+        destruct (Unshadow.det_reserve Ed (@eq_refl _ $ Term.App (Term.Cas pattern function1 function2) argument)).
         rewrite Eu in rename. discriminate rename. }
     apply Bool.andb_true_iff in E as [MC US]. apply Match.compatible_iff in MC. apply Unshadow.unshadowed_iff in US.
     destruct pattern. { constructor. cbn. apply SmallStep.ApM; try assumption. invert MC.
       constructor. { assumption. } apply Map.add_overriding. intros v F. contradiction N0. eexists. exact F. }
-    destruct (Shape.shape_or_ref_spec fuel context term2). 3: { constructor. }
-    + destruct (Match.move_or_reference_spec context move_or_reference term2); constructor; cbn.
+    destruct (Shape.shape_or_ref_spec context argument).
+    + destruct (Match.move_or_reference_spec context move_or_reference argument); constructor; cbn.
       * apply SmallStep.ApM. { exact MC. } { exact US. } constructor. exact Y0.
       * eapply SmallStep.ApN. { exact MC. } { exact US. } 2: { exact Y. } 2: { apply Map.eq_refl. }
         intros ? P. invert P. apply N0 in move_or_reference_matched as [].
-    + destruct (IHfuel context term2) as [[updated_context reduced_scrutinee] | |]; constructor.
+    + destruct H0 as [[updated_context reduced_scrutinee] |]; constructor; try solve [repeat constructor].
       * cbn in *. apply SmallStep.ApS. { exact MC. } { exact US. } 2: { exact Y. } intros ? P. invert P.
         apply Match.move_or_reference_shape_or_ref in move_or_reference_matched as SR. apply N0 in SR as [].
       * intros [c t] C. cbn in *. invert C.
@@ -194,4 +129,18 @@ Proof.
         -- apply (N1 (_, _)) in reduce_scrutinee as [].
         -- apply N0 in scrutinee_reduced as [].
         -- destruct not_yet_safe_to_match as [NS | NS]; apply NS. { exact MC. } exact US.
+  - destruct H as [[updated_context_without_self stepped] |].
+    + destruct (Map.find_spec updated_context_without_self self); constructor; cbn in *.
+      * intros [c t] S. cbn in *. invert S. apply not_overwriting_self.
+        eassert (Er : Map.Eq _ _); [| eassert (El : _ = _); [| assert (D := SmallStep.det Y0 Er El step_in_context)]].
+        -- eapply Map.remove_det. { apply Map.remove_remove. eexists. exact lookup. } { reflexivity. } { apply Map.eq_refl. } assumption.
+        -- eapply Map.find_det; eassumption.
+        -- eexists. apply D. exact Y1.
+      * econstructor. { exact Y. } { apply Map.remove_remove. eexists. exact Y. } { exact Y0. } { intros [y F]. apply N in F as []. }
+        apply Map.add_overriding. intros stepped' F. apply N in F as [].
+    + constructor. intros [c t] S. cbn in *. invert S. eapply (N (_, _)).
+      eapply SmallStep.eq. { exact step_in_context. } 2: { eapply Map.find_det; eassumption. } 2: { apply Map.eq_refl. } 2: { reflexivity. }
+      eapply Map.remove_det. { exact remove_self_from_context. } { reflexivity. } { apply Map.eq_refl. }
+      apply Map.remove_remove. eexists. exact Y.
+  - constructor. intros [c t] S. cbn in *. invert S. apply N in lookup as [].
 Qed.

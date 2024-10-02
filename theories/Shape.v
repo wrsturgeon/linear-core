@@ -1,5 +1,8 @@
+From Equations Require Import
+  Equations
+  .
 From LinearCore Require
-  Fuel
+  Context
   Map
   Reflect
   Term
@@ -55,6 +58,14 @@ Proof.
   - constructor. constructor.
 Qed.
 
+Lemma shape_iff t s
+  : ShapeOf t s <-> shape_of t = Some s.
+Proof.
+  destruct (shape_spec t).
+  - split. { intro S. destruct (det Y S). reflexivity. } intro E. invert E. exact Y.
+  - split. { intro S. apply N in S as []. } intro D. discriminate D.
+Qed.
+
 
 
 Inductive ShapeOrRef context : Term.term -> shape -> Prop :=
@@ -93,40 +104,40 @@ Qed.
 
 
 
-Fixpoint shape_or_ref fuel context t :=
-  match fuel with Fuel.Stop => Halt.OutOfFuel | Fuel.Continue fuel =>
-    match t with
-    | Term.Ctr _ => Halt.Return Resource
-    | Term.Var name Ownership.Referenced =>
-        match Map.find context name with None => Halt.Exit | Some term =>
-          shape_or_ref fuel (Map.remove name context) term
-        end
-    | Term.App curried argument =>
-        match shape_of curried with
-        | Some Resource => Halt.Return Resource
-        | _ => Halt.Exit
-        end
-    | Term.Cas _ _ _ => Halt.Return Function
-    | _ => Halt.Exit
-    end
-  end.
+Equations shape_or_ref (context : Context.context) (t : Term.term)
+  : option shape by wf (Map.cardinality context) lt :=
+  shape_or_ref _ (Term.Ctr _) := Some Resource;
+  shape_or_ref context (Term.Var name Ownership.Referenced) with Map.found_dec context name => {
+  | Map.NotFound => None
+  | @Map.Found term _ => shape_or_ref (Map.remove name context) term };
+  shape_or_ref _ (Term.App curried argument) :=
+    match shape_of curried with Some Resource => Some Resource | _ => None end;
+  shape_or_ref _ (Term.Cas _ _ _) := Some Function;
+  shape_or_ref _ _ := None.
+Next Obligation.
+  clear shape_or_ref. rewrite Map.cardinality_remove. apply Map.find_iff in Y as E. rewrite E. clear E.
+  unfold Map.cardinality. rewrite MapCore.cardinal_spec. apply MapCore.bindings_spec1 in Y.
+  remember (MapCore.bindings context) as b eqn:Eb; clear context Eb. destruct b. { invert Y. }
+  cbn. apply PeanoNat.Nat.lt_succ_diag_r. Qed.
+Fail Next Obligation.
 
-Lemma shape_or_ref_spec fuel context t
-  : Reflect.Halt (ShapeOrRef context t) (shape_or_ref fuel context t).
+Lemma shape_or_ref_spec context t
+  : Reflect.Option (ShapeOrRef context t) (shape_or_ref context t).
 Proof.
-  generalize dependent t. generalize dependent context. induction fuel. { constructor. }
-  destruct t; cbn; try solve [constructor; intros s C; invert C].
+  funelim (shape_or_ref context t).
   - constructor. constructor.
-  - destruct ownership. { constructor. intros s S. invert S. }
-    destruct (Map.find_spec context name). 2: { constructor. intros s C. invert C. apply N in F as []. }
-    destruct (IHfuel (Map.remove name context) x); constructor.
-    + econstructor. { exact Y. } 2: { exact Y0. } apply Map.remove_remove. eexists. exact Y.
-    + intros s C. invert C. destruct (Map.find_det Y F). eapply N. eapply eq_ref. { exact S. } 2: { reflexivity. }
-      intros k v. destruct R as [D R]. cbn in R. rewrite R. symmetry. apply Map.remove_if_present_remove.
-  - destruct (shape_spec t1). 2: { constructor. intros s C. invert C. apply N in curried_resource as []. }
-    destruct x; constructor. { constructor. exact Y. }
-    intros s C. invert C. assert (D := det Y curried_resource). discriminate D.
+  - constructor. intros s S. invert S.
+  - destruct (shape_of curried) eqn:E. 2: {
+      constructor. intros s S. invert S. apply shape_iff in curried_resource.
+      rewrite E in curried_resource. discriminate curried_resource. }
+    destruct s; constructor. { constructor. apply shape_iff. exact E. }
+    intros s S. invert S. apply shape_iff in curried_resource. rewrite E in curried_resource. invert curried_resource.
+  - constructor. intros s S. invert S.
   - constructor. constructor.
+  - destruct H; constructor. { econstructor. { exact Y. } { apply Map.remove_remove. eexists. exact Y. } exact Y0. }
+    intros s S. invert S. eapply N. destruct (Map.find_det Y F). eapply eq_ref. { exact S0. } 2: { reflexivity. }
+    eapply Map.remove_det. { exact R. } { reflexivity. } { apply Map.eq_refl. } apply Map.remove_remove. eexists. exact Y.
+  - constructor. intros s S. invert S. apply N in F as [].
 Qed.
 
 

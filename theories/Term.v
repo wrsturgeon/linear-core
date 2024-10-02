@@ -5,6 +5,7 @@ From LinearCore Require
   Reflect
   .
 From LinearCore Require Import
+  DollarSign
   Invert
   .
 
@@ -48,6 +49,34 @@ Proof.
     destruct (IHa1 b1); cbn. 2: { constructor. intro E. apply N. invert E. reflexivity. }
     subst. destruct (IHa2 b2); constructor. { f_equal. assumption. } intro E. apply N. invert E. reflexivity.
 Qed.
+
+
+
+Inductive Subtree : Term.term -> Term.term -> Prop :=
+  | SApF function argument
+      : Subtree function $ Term.App function argument
+  | SApA function argument
+      : Subtree argument $ Term.App function argument
+  | SFoT variable type body
+      : Subtree type $ Term.For variable type body
+  | SFoB variable type body
+      : Subtree body $ Term.For variable type body
+  | SCaB pattern body_if_match other_cases
+      : Subtree body_if_match $ Term.For pattern body_if_match other_cases
+  | SCaO pattern body_if_match other_cases
+      : Subtree other_cases $ Term.For pattern body_if_match other_cases
+  .
+
+
+
+Fixpoint nodes t :=
+  match t with
+  | Term.App a b
+  | Term.For _ a b
+  | Term.Cas _ a b =>
+      S $ nodes a + nodes b
+  | _ => 1
+  end.
 
 
 

@@ -3,6 +3,7 @@ From LinearCore Require
   Reflect
   .
 From LinearCore Require Import
+  DollarSign
   Invert
   .
 
@@ -1042,6 +1043,26 @@ Proof.
     + rewrite <- IH. 2: { assumption. } split; intro I. 2: { right. exact I. }
       invert I. { destruct H0; cbn in *; subst. contradiction n. reflexivity. } assumption.
     + split; intro I; (invert I; [left; assumption | right]); (eapply IH; [exact n |]); assumption.
+Qed.
+
+Lemma bindings_remove_split {T} {m : to T} {x y} (F : Map.Find m x y)
+  : exists bl br, (
+    MapCore.bindings m = bl ++ (x, y) :: br /\
+    MapCore.bindings (Map.remove x m) = bl ++ br
+  )%list.
+Proof.
+  rewrite bindings_remove. assert (ND := MapCore.bindings_spec2w m). apply MapCore.bindings_spec1 in F.
+  remember (MapCore.bindings m) as b eqn:Eb; clear m Eb. remember (x, y) as xy eqn:Exy.
+  generalize dependent ND. generalize dependent y. generalize dependent x.
+  induction F as [[k v] tail [] | [k v] tail I IH]; intros; cbn in *; subst; cbn in *.
+  - rewrite String.eqb_refl; cbn in *. invert ND. exists nil. exists tail. cbn in *. split. { reflexivity. }
+    apply List.forallb_filter_id. apply List.forallb_forall.
+    intros [k v] I. cbn in *. destruct (String.eqb_spec x k). 2: { reflexivity. }
+    subst. contradiction H1. apply SetoidList.InA_alt. eexists. split. 2: { exact I. } reflexivity.
+  - invert ND. specialize (IH _ _ Logic.eq_refl H2) as [bl [br [-> ->]]].
+    do 2 eexists. split. { rewrite <- List.app_comm_cons. reflexivity. }
+    destruct (String.eqb_spec x k); cbn in *. 2: { reflexivity. }
+    subst. contradiction H1. apply SetoidList.InA_app_iff. right. left. reflexivity.
 Qed.
 
 

@@ -1,3 +1,6 @@
+From Coq Require
+  String
+  .
 From LinearCore Require
   Reflect
   .
