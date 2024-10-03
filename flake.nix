@@ -245,6 +245,75 @@
               '';
               installPhase = "cp -Lr ./${uname} $out";
             };
+          example-match =
+            with self.packages.${system}.context;
+            ocaml-pkgs.buildDunePackage {
+              pname = "example_match";
+              version = "none";
+              src = self.packages.${system}.example-match-src;
+              propagatedBuildInputs = [ (self.lib.with-context self.packages.${system}.context) ];
+            };
+          example-match-src =
+            let
+              main-ml = ''
+                open Linear_core
+
+                let () =
+                  let err = Linear_core.Term.Ctr (Linear_core.Constructor.Builtin Linear_core.Constructor.Error) in
+                  let mov = (fun x -> Linear_core.Term.Var (x, Linear_core.Ownership.Owned)) in
+                  let term = Linear_core.Term.App (
+                    Linear_core.Term.Cas (
+                      Linear_core.Pattern.Nam "a",
+                      mov "a",
+                      Linear_core.Term.Cas (
+                        Linear_core.Pattern.Nam "b",
+                        mov "b",
+                        Linear_core.Term.Cas (
+                          Linear_core.Pattern.Nam "c",
+                          mov "c",
+                          Linear_core.Term.Cas (
+                            Linear_core.Pattern.Nam "d",
+                            mov "d",
+                            Linear_core.Term.Cas (
+                              Linear_core.Pattern.Nam "e",
+                              mov "e",
+                              Linear_core.Term.Cas (
+                                Linear_core.Pattern.Nam "f",
+                                mov "f",
+                                Linear_core.Term.Cas (
+                                  Linear_core.Pattern.Nam "g",
+                                  mov "g",
+                                  Linear_core.Term.Cas (
+                                    Linear_core.Pattern.Nam "h",
+                                    mov "h",
+                                    err
+                                  )
+                                )
+                              )
+                            )
+                          )
+                        )
+                      )
+                    ),
+                    err
+                  ) in print_endline (Linear_core.Term.to_string term)
+              '';
+              uname = "example_match";
+            in
+            pkgs.stdenvNoCC.mkDerivation {
+              name = "example-match-src";
+              src = nix-filter {
+                root = ./.;
+                include = [ ];
+              };
+              buildInputs = with self.packages.${system}.context; [ dune ];
+              buildPhase = ''
+                dune init proj ${uname} ./${uname}
+                sed -i 's/libraries/libraries linear_core/g' ${uname}/bin/dune
+                echo ${pkgs.lib.strings.escapeShellArg main-ml} > ${uname}/bin/main.ml
+              '';
+              installPhase = "cp -Lr ./${uname} $out";
+            };
           example-unshadow =
             with self.packages.${system}.context;
             ocaml-pkgs.buildDunePackage {

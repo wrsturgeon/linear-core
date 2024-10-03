@@ -11,7 +11,6 @@ From LinearCore Require Import
 
 
 
-(* TODO: unify `Mov` and `Ref` with a boolean ownership flag *)
 Inductive term : Set :=
   | Ctr (constructor : Constructor.constructor)
   | Var (name : String.string) (ownership : Ownership.ownership)
@@ -96,7 +95,7 @@ Fixpoint contains char s :=
 
 Definition opening_bracket : ascii := "{".
 
-Fixpoint to_string_configurable_acc line_length indent t : line_info * (string -> string -> string) * bool * bool := (
+Fixpoint to_string_configurable_acc line_length indent t {struct t} : line_info * (string -> string -> string) * bool * bool := (
   match t with
   | Ctr ctor =>
       let s := Constructor.to_string ctor in
@@ -106,125 +105,163 @@ Fixpoint to_string_configurable_acc line_length indent t : line_info * (string -
         (OneLiner $ length name, fun _ _ => name, false, false)
       else
         (OneLiner $ S $ length name, fun _ _ => "&" ++ name, false, false)
-  (* let _ = _; _ *)
-  | App (Cas (Pattern.Nam binder) body (Term.Ctr (Constructor.Builtin Constructor.Error))) scrutinee =>
-      let '(nb, sb, _, _) := to_string_configurable_acc line_length (S indent) body in
-      let '(ns, ss, _, _) := to_string_configurable_acc line_length (S indent) scrutinee in
-      match ns with
-      | Overflow => (Overflow, fun newline_str indent_str =>
-          "let " ++ binder ++ " =" ++ newline_str ++
-          repeat (S indent) indent_str ++ ss newline_str indent_str ++ ";" ++ newline_str ++
-          repeat indent indent_str ++ sb newline_str indent_str, true, true)
-      | OneLiner ns =>
-          let projected_length_let := 8 + length binder + ns in
-          if fits_on_line indent line_length projected_length_let then
-            match nb with
-            | Overflow => (Overflow, fun newline_str indent_str =>
-                  "let " ++ binder ++ " = " ++ ss " " "" ++ ";" ++ newline_str ++
-                  repeat indent indent_str ++ sb newline_str indent_str, true, true)
-            | OneLiner nb =>
-                let projected_length := S $ projected_length_let + nb in (OneLiner projected_length, fun _ _ =>
-                "let " ++ binder ++ " = " ++ ss " " "" ++ "; " ++ sb " " "", true, true)
-            end
-          else (Overflow, fun newline_str indent_str =>
-            "let " ++ binder ++ " =" ++ newline_str ++
-            repeat (S indent) indent_str ++ ss newline_str indent_str ++ ";" ++ newline_str ++
-            repeat indent indent_str ++ sb newline_str indent_str, true, true)
-      end
-  (* if let _ = _ { _ } else { _ } *)
-  | App (Cas pattern body_if_match other_cases) scrutinee =>
-      (* TODO: detect a full match expression ending in `Err` *)
-      let sp := Pattern.to_string pattern in
-      let '(nb, sb, _, _) := to_string_configurable_acc line_length (S indent) body_if_match in
-      let '(no, so, _, _) := to_string_configurable_acc line_length (S indent) other_cases in
-      let '(ns, ss, scrutinee_hard_to_read, _) := to_string_configurable_acc line_length (S indent) scrutinee in
-      match ns with
-      | Overflow => (Overflow,
-          match nb, no with
-          | Overflow, Overflow => fun newline_str indent_str =>
-              "if let " ++ sp ++ " = (" ++ newline_str ++
-              repeat (S indent) indent_str ++ ss newline_str indent_str ++ newline_str ++
-              repeat indent indent_str ++ ") {" ++ newline_str ++
-              repeat (S indent) indent_str ++ sb newline_str indent_str ++ newline_str ++
-              repeat indent indent_str ++ "} else {" ++ newline_str ++
-              repeat (S indent) indent_str ++ so newline_str indent_str ++ newline_str ++
-              repeat indent indent_str ++ "}"
-          | Overflow, OneLiner _ => fun newline_str indent_str =>
-              "if let " ++ sp ++ " = (" ++ newline_str ++
-              repeat (S indent) indent_str ++ ss newline_str indent_str ++ newline_str ++
-              repeat indent indent_str ++ ") {" ++ newline_str ++
-              repeat (S indent) indent_str ++ sb newline_str indent_str ++ newline_str ++
-              repeat indent indent_str ++ "} else { " ++ so " " "" ++ " }"
-          | OneLiner _, Overflow => fun newline_str indent_str =>
-              "if let " ++ sp ++ " = (" ++ newline_str ++
-              repeat (S indent) indent_str ++ ss newline_str indent_str ++ newline_str ++
-              repeat indent indent_str ++ ") { " ++ sb " " "" ++ " } else {" ++ newline_str ++
-              repeat (S indent) indent_str ++ so newline_str indent_str ++ newline_str ++
-              repeat indent indent_str ++ "}"
-          | OneLiner nb, OneLiner no =>
-              let projected_length := 16 + nb + no in
-              if fits_on_line indent line_length projected_length then fun newline_str indent_str =>
-                "if let " ++ sp ++ " = (" ++ newline_str ++
-                repeat (S indent) indent_str ++ ss newline_str indent_str ++ newline_str ++
-                repeat indent indent_str ++ ") { " ++ sb " " "" ++ " } else { " ++ so " " "" ++ " }"
-              else fun newline_str indent_str =>
-                "if let " ++ sp ++ " = (" ++ newline_str ++
-                repeat (S indent) indent_str ++ ss newline_str indent_str ++ newline_str ++
-                repeat indent indent_str ++ ") { " ++ sb " " "" ++ " } else {" ++ newline_str ++
-                repeat (S indent) indent_str ++ so newline_str indent_str ++ newline_str ++
-                repeat indent indent_str ++ "}"
-          end, true, false)
-      | OneLiner ns =>
-          let ss := ss " " "" in
-          let '(extra, ss) := if scrutinee_hard_to_read then (2, "(" ++ ss ++ ")") else (0, ss) in
-          match nb, no with
-          | Overflow, Overflow => (Overflow, fun newline_str indent_str =>
-              "if let " ++ sp ++ " = " ++ ss ++ " {" ++ newline_str ++
-              repeat (S indent) indent_str ++ sb newline_str indent_str ++ newline_str ++
-              repeat indent indent_str ++ "} else {" ++ newline_str ++
-              repeat (S indent) indent_str ++ so newline_str indent_str ++ newline_str ++
-              repeat indent indent_str ++ "}", true, false)
-          | Overflow, OneLiner _ => (Overflow, fun newline_str indent_str =>
-              "if let " ++ sp ++ " = " ++ ss ++ " {" ++ newline_str ++
-              repeat (S indent) indent_str ++ sb newline_str indent_str ++ newline_str ++
-              repeat indent indent_str ++ "} else { " ++ so " " "" ++ " }", true, false)
-          | OneLiner _, Overflow => (Overflow, fun newline_str indent_str =>
-              "if let " ++ sp ++ " = " ++ ss ++ " { " ++ sb " " "" ++ " } else {" ++ newline_str ++
-              repeat (S indent) indent_str ++ so newline_str indent_str ++ newline_str ++
-              repeat indent indent_str ++ "}", true, false)
-          | OneLiner nb, OneLiner no =>
-              let projected_length_psb := 22 + length sp + extra + ns + nb in
-              if fits_on_line indent line_length projected_length_psb then
-                let projected_length := 3 + projected_length_psb + no in
-                if fits_on_line indent line_length projected_length then (OneLiner projected_length, fun newline_str indent_str =>
-                  "if let " ++ sp ++ " = " ++ ss ++ " { " ++ sb " " "" ++ " } else { " ++ so " " "" ++ " }", true, false)
-                else (Overflow, fun newline_str indent_str =>
-                  "if let " ++ sp ++ " = " ++ ss ++ " { " ++ sb " " "" ++ " } else {" ++ newline_str ++
-                  repeat (S indent) indent_str ++ so newline_str indent_str ++ newline_str ++
-                  repeat indent indent_str ++ "}", true, false)
-              else (Overflow, fun newline_str indent_str =>
-                "if let " ++ sp ++ " = (" ++ newline_str ++
-                repeat (S indent) indent_str ++ ss ++ newline_str ++
-                repeat indent indent_str ++ ") { " ++ sb " " "" ++ " } else { " ++ so " " "" ++ " }", true, false)
+  | App function scrutinee =>
+      match to_string_match_cases line_length indent function with
+      | Some (nm, sm) =>
+          let '(ns, ss, scrutinee_hard_to_read, _) := to_string_configurable_acc line_length (S indent) scrutinee in
+          match nm with
+          | Overflow => (Overflow,
+              match ns with
+              | Overflow => fun newline_str indent_str =>
+                  "match (" ++ newline_str ++
+                  repeat (S indent) indent_str ++ ss newline_str indent_str ++ newline_str ++
+                  repeat indent indent_str ++ ") {" ++ newline_str ++
+                  repeat indent indent_str ++ sm newline_str indent_str ++ "}"
+              | OneLiner ns => fun newline_str indent_str =>
+                  let ss := ss " " "" in
+                  let ss := if scrutinee_hard_to_read then "(" ++ ss ++ ")" else ss in
+                  "match " ++ ss ++ " {" ++ newline_str ++
+                  repeat indent indent_str ++ sm newline_str indent_str ++ "}"
+              end, true, false)
+          | OneLiner nm =>
+              match ns with
+              | Overflow => (Overflow, fun newline_str indent_str =>
+                  "match (" ++ newline_str ++
+                  repeat (S indent) indent_str ++ ss newline_str indent_str ++ newline_str ++
+                  repeat indent indent_str ++ ") { " ++ sm " " "" ++ "}", true, false)
+              | OneLiner ns =>
+                  let ss := ss " " "" in
+                  let '(extra, ss) := if scrutinee_hard_to_read then (2, "(" ++ ss ++ ")") else (0, ss) in
+                  let projected_length := 11 + extra + ns + nm in
+                  if fits_on_line indent line_length projected_length then (
+                    OneLiner projected_length,
+                    fun newline_str indent_str =>
+                    "match " ++ ss ++ " { " ++ sm " " "" ++ "}", true, false)
+                  else (Overflow, fun newline_str indent_str =>
+                    "match " ++ ss ++ " {" ++ newline_str ++
+                    repeat indent indent_str ++ sm newline_str indent_str ++ "}", true, false)
+              end
           end
-      end
-  | App function argument =>
-      let '(nf, sf, bf, right_needs_to_be_parenthesized) := to_string_configurable_acc line_length (S indent) function in
-      let '(na, sa, ba, _) := to_string_configurable_acc line_length (S indent) argument in
-      let b := orb bf ba in
-      let '(n_split, split) := if right_needs_to_be_parenthesized then (2, " $") else (0, "") in
-      match nf with
-      | Overflow => (Overflow, fun newline_str indent_str =>
-          sf newline_str indent_str ++ split ++ " " ++ sa newline_str indent_str, b, true)
-      | OneLiner nf =>
-          match na with
-          | Overflow => (Overflow, fun newline_str indent_str =>
-              sf newline_str indent_str ++ split ++ " " ++ sa newline_str indent_str, b, true)
-          | OneLiner na =>
-              let projected_length := S $ n_split + nf + na in
-              if fits_on_line indent line_length projected_length then
-                (OneLiner projected_length, fun _ _ => sf " " "" ++ split ++ " " ++ sa " " "", b, true)
-              else (Overflow, fun newline_str _ => sf " " "" ++ split ++ newline_str ++ sa " " "", b, true)
+      | None =>
+          match function with
+          | Cas (Pattern.Nam binder) body (Term.Ctr (Constructor.Builtin Constructor.Error)) =>
+              let '(nb, sb, _, _) := to_string_configurable_acc line_length (S indent) body in
+              let '(ns, ss, _, _) := to_string_configurable_acc line_length (S indent) scrutinee in
+              match ns with
+              | Overflow => (Overflow, fun newline_str indent_str =>
+                  "let " ++ binder ++ " =" ++ newline_str ++
+                  repeat (S indent) indent_str ++ ss newline_str indent_str ++ ";" ++ newline_str ++
+                  repeat indent indent_str ++ sb newline_str indent_str, true, true)
+              | OneLiner ns =>
+                  let projected_length_let := 8 + length binder + ns in
+                  if fits_on_line indent line_length projected_length_let then
+                    match nb with
+                    | Overflow => (Overflow, fun newline_str indent_str =>
+                          "let " ++ binder ++ " = " ++ ss " " "" ++ ";" ++ newline_str ++
+                          repeat indent indent_str ++ sb newline_str indent_str, true, true)
+                    | OneLiner nb =>
+                        let projected_length := S $ projected_length_let + nb in (OneLiner projected_length, fun _ _ =>
+                        "let " ++ binder ++ " = " ++ ss " " "" ++ "; " ++ sb " " "", true, true)
+                    end
+                  else (Overflow, fun newline_str indent_str =>
+                    "let " ++ binder ++ " =" ++ newline_str ++
+                    repeat (S indent) indent_str ++ ss newline_str indent_str ++ ";" ++ newline_str ++
+                    repeat indent indent_str ++ sb newline_str indent_str, true, true)
+              end
+          | Cas pattern body_if_match other_cases =>
+              let sp := Pattern.to_string pattern in
+              let '(nb, sb, _, _) := to_string_configurable_acc line_length (S indent) body_if_match in
+              let '(no, so, _, _) := to_string_configurable_acc line_length (S indent) other_cases in
+              let '(ns, ss, scrutinee_hard_to_read, _) := to_string_configurable_acc line_length (S indent) scrutinee in
+              match ns with
+              | Overflow => (Overflow,
+                  match nb, no with
+                  | Overflow, Overflow => fun newline_str indent_str =>
+                      "if let " ++ sp ++ " = (" ++ newline_str ++
+                      repeat (S indent) indent_str ++ ss newline_str indent_str ++ newline_str ++
+                      repeat indent indent_str ++ ") {" ++ newline_str ++
+                      repeat (S indent) indent_str ++ sb newline_str indent_str ++ newline_str ++
+                      repeat indent indent_str ++ "} else {" ++ newline_str ++
+                      repeat (S indent) indent_str ++ so newline_str indent_str ++ newline_str ++
+                      repeat indent indent_str ++ "}"
+                  | Overflow, OneLiner _ => fun newline_str indent_str =>
+                      "if let " ++ sp ++ " = (" ++ newline_str ++
+                      repeat (S indent) indent_str ++ ss newline_str indent_str ++ newline_str ++
+                      repeat indent indent_str ++ ") {" ++ newline_str ++
+                      repeat (S indent) indent_str ++ sb newline_str indent_str ++ newline_str ++
+                      repeat indent indent_str ++ "} else { " ++ so " " "" ++ " }"
+                  | OneLiner _, Overflow => fun newline_str indent_str =>
+                      "if let " ++ sp ++ " = (" ++ newline_str ++
+                      repeat (S indent) indent_str ++ ss newline_str indent_str ++ newline_str ++
+                      repeat indent indent_str ++ ") { " ++ sb " " "" ++ " } else {" ++ newline_str ++
+                      repeat (S indent) indent_str ++ so newline_str indent_str ++ newline_str ++
+                      repeat indent indent_str ++ "}"
+                  | OneLiner nb, OneLiner no =>
+                      let projected_length := 16 + nb + no in
+                      if fits_on_line indent line_length projected_length then fun newline_str indent_str =>
+                        "if let " ++ sp ++ " = (" ++ newline_str ++
+                        repeat (S indent) indent_str ++ ss newline_str indent_str ++ newline_str ++
+                        repeat indent indent_str ++ ") { " ++ sb " " "" ++ " } else { " ++ so " " "" ++ " }"
+                      else fun newline_str indent_str =>
+                        "if let " ++ sp ++ " = (" ++ newline_str ++
+                        repeat (S indent) indent_str ++ ss newline_str indent_str ++ newline_str ++
+                        repeat indent indent_str ++ ") { " ++ sb " " "" ++ " } else {" ++ newline_str ++
+                        repeat (S indent) indent_str ++ so newline_str indent_str ++ newline_str ++
+                        repeat indent indent_str ++ "}"
+                  end, true, false)
+              | OneLiner ns =>
+                  let ss := ss " " "" in
+                  let '(extra, ss) := if scrutinee_hard_to_read then (2, "(" ++ ss ++ ")") else (0, ss) in
+                  match nb, no with
+                  | Overflow, Overflow => (Overflow, fun newline_str indent_str =>
+                      "if let " ++ sp ++ " = " ++ ss ++ " {" ++ newline_str ++
+                      repeat (S indent) indent_str ++ sb newline_str indent_str ++ newline_str ++
+                      repeat indent indent_str ++ "} else {" ++ newline_str ++
+                      repeat (S indent) indent_str ++ so newline_str indent_str ++ newline_str ++
+                      repeat indent indent_str ++ "}", true, false)
+                  | Overflow, OneLiner _ => (Overflow, fun newline_str indent_str =>
+                      "if let " ++ sp ++ " = " ++ ss ++ " {" ++ newline_str ++
+                      repeat (S indent) indent_str ++ sb newline_str indent_str ++ newline_str ++
+                      repeat indent indent_str ++ "} else { " ++ so " " "" ++ " }", true, false)
+                  | OneLiner _, Overflow => (Overflow, fun newline_str indent_str =>
+                      "if let " ++ sp ++ " = " ++ ss ++ " { " ++ sb " " "" ++ " } else {" ++ newline_str ++
+                      repeat (S indent) indent_str ++ so newline_str indent_str ++ newline_str ++
+                      repeat indent indent_str ++ "}", true, false)
+                  | OneLiner nb, OneLiner no =>
+                      let projected_length_psb := 22 + length sp + extra + ns + nb in
+                      if fits_on_line indent line_length projected_length_psb then
+                        let projected_length := 3 + projected_length_psb + no in
+                        if fits_on_line indent line_length projected_length then (OneLiner projected_length, fun newline_str indent_str =>
+                          "if let " ++ sp ++ " = " ++ ss ++ " { " ++ sb " " "" ++ " } else { " ++ so " " "" ++ " }", true, false)
+                        else (Overflow, fun newline_str indent_str =>
+                          "if let " ++ sp ++ " = " ++ ss ++ " { " ++ sb " " "" ++ " } else {" ++ newline_str ++
+                          repeat (S indent) indent_str ++ so newline_str indent_str ++ newline_str ++
+                          repeat indent indent_str ++ "}", true, false)
+                      else (Overflow, fun newline_str indent_str =>
+                        "if let " ++ sp ++ " = (" ++ newline_str ++
+                        repeat (S indent) indent_str ++ ss ++ newline_str ++
+                        repeat indent indent_str ++ ") { " ++ sb " " "" ++ " } else { " ++ so " " "" ++ " }", true, false)
+                  end
+              end
+          | _ =>
+              let '(nf, sf, bf, right_needs_to_be_parenthesized) := to_string_configurable_acc line_length (S indent) function in
+              let '(na, sa, ba, _) := to_string_configurable_acc line_length (S indent) scrutinee in
+              let b := orb bf ba in
+              let '(n_split, split) := if right_needs_to_be_parenthesized then (2, " $") else (0, "") in
+              match nf with
+              | Overflow => (Overflow, fun newline_str indent_str =>
+                  sf newline_str indent_str ++ split ++ " " ++ sa newline_str indent_str, b, true)
+              | OneLiner nf =>
+                  match na with
+                  | Overflow => (Overflow, fun newline_str indent_str =>
+                      sf newline_str indent_str ++ split ++ " " ++ sa newline_str indent_str, b, true)
+                  | OneLiner na =>
+                      let projected_length := S $ n_split + nf + na in
+                      if fits_on_line indent line_length projected_length then
+                        (OneLiner projected_length, fun _ _ => sf " " "" ++ split ++ " " ++ sa " " "", b, true)
+                      else (Overflow, fun newline_str _ => sf " " "" ++ split ++ newline_str ++ sa " " "", b, true)
+                  end
+              end
           end
       end
   | For variable type body =>
@@ -310,13 +347,43 @@ Fixpoint to_string_configurable_acc line_length indent t : line_info * (string -
                 repeat indent indent_str ++ "}", true, false)
           end
       end
+  end)%string with
+to_string_match_cases line_length indent t {struct t} : option (line_info * _) := (
+  match t with
+  | Term.Ctr (Constructor.Builtin Constructor.Error) => Some (OneLiner 0, fun _ _ => "")
+  | Term.Cas pattern body_if_match other_cases =>
+      match to_string_match_cases line_length indent other_cases with None => None | Some (no, so) => Some $
+        let '(nb, sb, _, _) := to_string_configurable_acc line_length indent body_if_match in
+        let p := Pattern.to_string pattern in
+        match no, nb with
+        | OneLiner no, OneLiner nb =>
+            let projected_length_this_arm := 8 + length p + nb in
+            if fits_on_line indent line_length projected_length_this_arm then (
+              let projected_length := projected_length_this_arm + no in
+              if fits_on_line indent line_length projected_length then OneLiner projected_length else Overflow,
+              fun newline_str indent_str =>
+              indent_str ++ p ++ " => { " ++ sb " " "" ++ " }" ++ newline_str ++
+              repeat indent indent_str ++ so newline_str indent_str)
+            else (Overflow, fun newline_str indent_str =>
+              indent_str ++ p ++ " => {" ++ newline_str ++
+              repeat (S $ S indent) indent_str ++ sb newline_str indent_str ++ newline_str ++
+              repeat (S indent) indent_str ++ "}" ++ newline_str ++
+              repeat indent indent_str ++ so newline_str indent_str)
+        | _, _ => (Overflow, fun newline_str indent_str =>
+            indent_str ++ p ++ " => {" ++ newline_str ++
+            repeat (S $ S indent) indent_str ++ sb newline_str indent_str ++ newline_str ++
+            repeat (S indent) indent_str ++ "}" ++ newline_str ++
+            repeat indent indent_str ++ so newline_str indent_str)
+        end
+      end
+  | _ => None
   end)%string.
 
 Definition default_newline_char := Ascii.Ascii false true false true false false false false.
 Arguments default_newline_char/.
 Definition default_newline_str := String.String default_newline_char String.EmptyString.
 Arguments default_newline_str/.
-Definition default_line_length := 128.
+Definition default_line_length := 80.
 Arguments default_line_length/.
 Definition default_indent_str : string := "  ".
 Arguments default_indent_str/.
