@@ -213,22 +213,53 @@ Qed.
 
 
 
-Theorem unshadowed_invariant {c t c' t'} (S : Step c t c' t')
-  (Ut : Unshadow.Unshadowed t) (Uc : Map.ForAll (fun _ => Unshadow.Unshadowed) c)
-  : Unshadow.Unshadowed t' /\ Map.ForAll (fun _ => Unshadow.Unshadowed) c'.
+Lemma unused_in {c t c' t'} (S : Step c t c' t')
+  {x} (N : forall (U : UsedIn.Indirect c t x), False) (I : Map.In c x)
+  : Map.In c' x.
 Proof.
-  generalize dependent Uc. generalize dependent Ut. induction S; intros.
-  - split. { eapply Uc. exact lookup. } intros k v F. eapply Uc. apply no_contraction. exact F.
-  - split. { constructor. } intros k v F. destruct IHS as [U FA]. { eapply Uc. exact lookup. }
-    + intros k' v' F'. apply remove_self_from_context in F' as [N' F']. eapply Uc. exact F'.
-    + apply update in F as [[-> ->] | F]. { exact U. } eapply FA. exact F.
-  - invert Ut. specialize (IHS Uf Uc) as [IHt IHc]. split. { constructor. { exact IHt. } { exact Ua. } Abort.
-(*
-  - invert unshadowed. invert Ut. invert Uf. invert Uf0. split. { exact Ub. } intros.
-    eapply Match.unshadow_pattern. { exact Ua. } { exact Uc. } { exact matched. } exact F.
-  - invert unshadowed. invert Ut. specialize (IHS Ua Uc) as [IHt IHc]. split.
-    + constructor; try eassumption; intros. { eapply disj_f_a0. { exact Bf. } Abort.
- *)
-(* So, no, this is not worth enforcing. In other words, why have laziness if we're spending compute
- * renaming terms that we might never use? On the other hand, it costs compute to *check* and/or unshadow at every match.
- * TODO: maybe profile this? *)
+  destruct I as [y F]. generalize dependent y. generalize dependent x. induction S; intros.
+  - eexists. apply no_contraction. split. { intros ->. apply N. constructor. } exact F.
+  - eapply Map.in_add. { exact update. } destruct (String.eqb_spec x self); [left | right]. { exact e. }
+    eapply IHS. 2: { apply remove_self_from_context. split. { exact n. } exact F. }
+    intro U. apply N. eapply UsedIn.ITransitive. { split. { exact lookup. } apply Map.remove_if_present_remove. }
+    eapply UsedIn.indirect_superset. { exact U. }
+    intros k v F'. apply remove_self_from_context in F' as [N' F'].
+    apply Map.remove_if_present_remove. split. { exact N'. } exact F'.
+  - eapply IHS. 2: { exact F. } intro U. apply N. apply UsedIn.IApF. exact U.
+  - invert matched.
+    + eapply Map.in_add. { exact S. } destruct (String.eqb_spec x name); [left | right]. { exact e. } eexists. exact F.
+    + eapply Match.in_move_or_reference. { exact move_or_reference_matched. } right. eexists. exact F.
+  - eapply IHS. 2: { exact F. } intro U. apply N. apply UsedIn.IApA. exact U.
+  - eapply Map.in_eq. { apply Map.eq_sym. exact context_unchanged. } eexists. exact F.
+  - eapply Map.in_eq. { apply Map.eq_sym. exact context_unchanged. } eexists. exact F.
+Qed.
+
+Definition AllVariablesUsed context term : Prop :=
+  Map.ForAll (fun k _ => UsedIn.Indirect context term k) context.
+Arguments AllVariablesUsed context term/.
+
+Theorem no_memory_leaks {c t} (AU : AllVariablesUsed c t) {c' t'} (S : Step c t c' t')
+  : AllVariablesUsed c' t'.
+Proof.
+  generalize dependent AU. induction S; cbn in *; intros.
+  - destruct no_contraction as [_ no_contraction]. apply no_contraction in F as [N F].
+    specialize (AU _ _ F). invert AU. 2: { contradiction N. reflexivity. }
+    destruct F0 as [Fc R]. destruct (Map.find_det lookup Fc).
+    eapply UsedIn.indirect_superset. { exact transitive. }
+    intros k' v' F'. apply R in F' as [N' F']. apply no_contraction. split. { exact N'. } exact F'.
+  - apply update in F as [[-> ->] | F]. { constructor. } econstructor.
+    + split. { apply update. left. split; reflexivity. } apply Map.remove_if_present_remove.
+    + eapply UsedIn.indirect_superset; [eapply IHS |]. 2: { exact F. } 2: {
+        intros k' v' F'. apply Map.remove_if_present_remove.
+        split. { intros ->. apply not_overwriting_self. eexists. exact F'. }
+        apply update. right. exact F'. }
+      intros k' v' F'. apply remove_self_from_context in F' as [N' F']. specialize (AU _ _ F').
+      invert AU. 2: { contradiction N'. reflexivity. } destruct F0 as [Fc R]. destruct (Map.find_det lookup Fc).
+      eapply UsedIn.indirect_superset. { exact transitive. } intros k'' v'' F''. apply R in F'' as [F'' N''].
+      apply remove_self_from_context. split. { exact F''. } exact N''.
+  - destruct (Map.in_spec (UsedIn.indirect updated_context argument) k); [apply UsedIn.IApA | apply UsedIn.IApF]. {
+      apply UsedIn.indirect_spec. exact Y. } rename N into Ni. assert (N : ~UsedIn.Indirect updated_context argument k). {
+      intro B. apply Ni. apply UsedIn.indirect_spec. exact B. } clear Ni.
+    eapply IHS; clear IHS. 2: { exact F. } intros k' v' F'. specialize (AU _ _ F').
+    invert AU. { exact used_in_function. } Abort. (* This case should be true with 90% certainty, but this might be a dead end *)
+    (* I'm pretty sure that this is straight-up not true in most of the following cases *)
