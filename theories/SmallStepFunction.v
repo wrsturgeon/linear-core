@@ -165,3 +165,29 @@ Proof.
       apply Map.remove_remove. eexists. exact Y.
   - constructor. intros [c t] S. cbn in *. invert S. apply N in lookup as [].
 Qed.
+
+Theorem iff context term context' term'
+  : SmallStep.Step context term context' term' <-> exists context'', (
+    step context term = Some (context'', term') /\ Map.Eq context'' context').
+Proof.
+  destruct (spec context term) as [[context'' term''] stepped | couldnt_step]; cbn in *.
+  - split.
+    + intro S. destruct (SmallStep.det stepped (Map.eq_refl _) eq_refl S) as [Ec ->].
+      eexists. split. { reflexivity. } exact Ec.
+    + intros [context''' [E Ec]]. invert E.
+      eapply SmallStep.eq. { exact stepped. } { apply Map.eq_refl. } { reflexivity. } { exact Ec. } reflexivity.
+  - split. { intro S. apply (couldnt_step (_, _)) in S as []. } intros [? [D _]]. discriminate D.
+Qed.
+
+
+
+Variant step_or_not context term : Type :=
+  | Stepped {context' term'} (stepped : SmallStep.Step context term context' term')
+  | CouldntStep (couldnt_step : forall context' term', ~SmallStep.Step context term context' term')
+  .
+
+Definition dec context term : step_or_not context term. Proof.
+  destruct (step context term) as [[context' term'] |] eqn:E; [eleft | right].
+  - apply iff. eexists. split. { exact E. } apply Map.eq_refl.
+  - intros context' term' C. apply iff in C as [context'' [E' Ec]]. rewrite E' in E. discriminate E.
+Defined.

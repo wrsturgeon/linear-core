@@ -103,6 +103,10 @@ Proof.
       right; apply IHS; [left | right]; assumption.
 Qed.
 
+Lemma strict_wf {context strict scrutinee context_with_matches} (S : Strict context strict scrutinee context_with_matches)
+  : WellFormed.Strict strict.
+Proof. induction S; constructor. { exact IHS. } intro B. apply N. eapply in_strict. { exact S. } left. exact B. Qed.
+
 Definition CompatibleStrict (context : Context.context) strict : Prop :=
   forall x (I : Map.In context x) (B : BoundIn.Strict strict x), False.
 Arguments CompatibleStrict context strict/.

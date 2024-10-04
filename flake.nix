@@ -384,7 +384,7 @@
                     cut = "${pkgs.coreutils}/bin/cut";
                     echo = "${pkgs.coreutils}/bin/echo";
                     rev = "${pkgs.util-linux}/bin/rev";
-                  in
+                  in builtins.trace name
                   ''
 
                     if [ -d ${bin} ]; then
@@ -406,8 +406,7 @@
           );
           test-syntax = checker {
             buildPhase = ''
-              # if ${rg} 'Admitted|Axiom|Conjecture|Parameter|Hypothesis|Hypotheses|Variable ' -g '*.v'; then
-              if ${rg} 'Admitted|Axiom|Conjecture|Parameter|Hypothesis|Hypotheses|Variable ' -g '*.v' -g '!theories/NewNames.v'; then
+              if ${rg} 'Admitted|Axiom|Conjecture|Parameter|Hypothesis|Hypotheses|Variable' -g '*.v' -g '!theories/NewNames.v'; then
                 echo
                 echo 'SYNTAX ERROR: unverified assumption (above)'
                 exit 1
@@ -475,7 +474,7 @@
               installPhase = "cp -Lr ./${pname} $out";
             };
           tests = checker {
-            buildInputs = builtins.map (pkg: self.packages.${system}.${pkg}) (
+            buildInputs = builtins.map (pkg: builtins.trace pkg self.packages.${system}.${pkg}) (
               builtins.filter (pkgs.lib.strings.hasPrefix "test-") (builtins.attrNames self.packages.${system})
             );
           };

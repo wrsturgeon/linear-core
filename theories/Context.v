@@ -52,7 +52,7 @@ Qed.
 
 
 
-Instance shit : Classes.WellFounded $ Telescopes.tele_measure
+Instance wf : Classes.WellFounded $ Telescopes.tele_measure
   (Telescopes.ext context (fun _ : context => Telescopes.tip Term.term)) nat
   (fun context (_ : Term.term) => Map.cardinality context)  lt.
 Proof. apply Telescopes.wf_tele_measure. exact Subterm.lt_wf. Qed.

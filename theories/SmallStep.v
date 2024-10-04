@@ -234,12 +234,12 @@ Proof.
   - eapply Map.in_eq. { apply Map.eq_sym. exact context_unchanged. } eexists. exact F.
 Qed.
 
-Definition AllVariablesUsed context term : Prop :=
+Definition AllUsed context term : Prop :=
   Map.ForAll (fun k _ => UsedIn.Indirect context term k) context.
-Arguments AllVariablesUsed context term/.
+Arguments AllUsed context term/.
 
-Theorem no_memory_leaks {c t} (AU : AllVariablesUsed c t) {c' t'} (S : Step c t c' t')
-  : AllVariablesUsed c' t'.
+Theorem no_memory_leaks {c t} (AU : AllUsed c t) {c' t'} (S : Step c t c' t')
+  : AllUsed c' t'.
 Proof.
   generalize dependent AU. induction S; cbn in *; intros.
   - destruct no_contraction as [_ no_contraction]. apply no_contraction in F as [N F].

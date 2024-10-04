@@ -58,6 +58,9 @@ Variant found {T} (m : to T) k : Type :=
   | NotFound (N : forall v, ~Find m k v)
   .
 
+(*Extract Inductive found => "option" [ "Some" "None" ]*)
+(*  "TODO".*)
+
 Lemma found_dec {T} (m : to T) k : found m k. Proof.
   destruct (find m k) as [v |] eqn:F; [eleft | right]. { apply find_iff. exact F. }
   intros v C. apply find_iff in C. rewrite F in C. discriminate C.
@@ -386,11 +389,11 @@ Proof.
 Qed.
 
 Lemma add_det
-  k1 {T} (v1 : T) m1 m1' (A1 : Add k1 v1 m1 m1')
-  k2 (Ek : k1 = k2)
-  v2 (Ev : v1 = v2)
-  m2 (Em : Eq m1 m2)
-  m2' (A2 : Add k2 v2 m2 m2')
+  {k1 T} {v1 : T} {m1 m1'} (A1 : Add k1 v1 m1 m1')
+  {k2} (Ek : k1 = k2)
+  {v2} (Ev : v1 = v2)
+  {m2} (Em : Eq m1 m2)
+  {m2'} (A2 : Add k2 v2 m2 m2')
   : Eq m1' m2'.
 Proof. cbn in *. intros x y. subst. rewrite A1. rewrite A2. rewrite Em. reflexivity. Qed.
 
@@ -1045,26 +1048,6 @@ Proof.
     + split; intro I; (invert I; [left; assumption | right]); (eapply IH; [exact n |]); assumption.
 Qed.
 
-Lemma bindings_remove_split {T} {m : to T} {x y} (F : Map.Find m x y)
-  : exists bl br, (
-    MapCore.bindings m = bl ++ (x, y) :: br /\
-    MapCore.bindings (Map.remove x m) = bl ++ br
-  )%list.
-Proof.
-  rewrite bindings_remove. assert (ND := MapCore.bindings_spec2w m). apply MapCore.bindings_spec1 in F.
-  remember (MapCore.bindings m) as b eqn:Eb; clear m Eb. remember (x, y) as xy eqn:Exy.
-  generalize dependent ND. generalize dependent y. generalize dependent x.
-  induction F as [[k v] tail [] | [k v] tail I IH]; intros; cbn in *; subst; cbn in *.
-  - rewrite String.eqb_refl; cbn in *. invert ND. exists nil. exists tail. cbn in *. split. { reflexivity. }
-    apply List.forallb_filter_id. apply List.forallb_forall.
-    intros [k v] I. cbn in *. destruct (String.eqb_spec x k). 2: { reflexivity. }
-    subst. contradiction H1. apply SetoidList.InA_alt. eexists. split. 2: { exact I. } reflexivity.
-  - invert ND. specialize (IH _ _ Logic.eq_refl H2) as [bl [br [-> ->]]].
-    do 2 eexists. split. { rewrite <- List.app_comm_cons. reflexivity. }
-    destruct (String.eqb_spec x k); cbn in *. 2: { reflexivity. }
-    subst. contradiction H1. apply SetoidList.InA_app_iff. right. left. reflexivity.
-Qed.
-
 
 
 Definition cardinality {T} : to T -> nat := MapCore.cardinal.
@@ -1385,3 +1368,131 @@ Qed.
 Lemma in_range m k
   : In (range m) k <-> InRange m k.
 Proof. rewrite <- (find_range m k tt). split; [intros [[] F] | intro F; exists tt]; exact F. Qed.
+
+
+
+Definition unflatten {T} := List.fold_right (fun (kv : _ * T) => overriding_add (fst kv) (snd kv)) empty.
+
+Lemma bindings_unflatten {T} bindings (SB : Sorted.Sorted MapCore.lt_key bindings) (ND : SetoidList.NoDupA MapCore.eq_key bindings)
+  : MapCore.bindings (@unflatten T bindings) = bindings.
+Proof.
+  apply sorted_eq. { apply MapCore.bindings_spec2. } { apply MapCore.bindings_spec2w. } { exact SB. } { exact ND. }
+  intros [k v]. rewrite MapCore.bindings_spec1. fold (Find (unflatten bindings) k v).
+  generalize dependent v. generalize dependent k. generalize dependent ND. generalize dependent SB.
+  induction bindings as [| [k v] tail IH]; intros; cbn in *. { split; intro C; invert C. }
+  rewrite find_overriding_add. rewrite SetoidList.InA_cons. unfold MapCore.eq_key_elt at 1. cbn. invert SB. invert ND.
+  rewrite IH; try assumption. split; (intros [[-> ->] | I]; [left; split; reflexivity | right]). { apply I. }
+  split. 2: { exact I. } intros ->. apply H3. apply eq_key_elt. eexists. exact I.
+Qed.
+
+
+
+Lemma bindings_remove_split {T} {m : to T} {x y} (F : Find m x y)
+  : exists bl br, (
+    MapCore.bindings m = bl ++ (x, y) :: br /\
+    MapCore.bindings (remove x m) = bl ++ br
+  )%list.
+Proof.
+  rewrite bindings_remove. assert (ND := MapCore.bindings_spec2w m). apply MapCore.bindings_spec1 in F.
+  remember (MapCore.bindings m) as b eqn:Eb; clear m Eb. remember (x, y) as xy eqn:Exy.
+  generalize dependent ND. generalize dependent y. generalize dependent x.
+  induction F as [[k v] tail [] | [k v] tail I IH]; intros; cbn in *; subst; cbn in *.
+  - rewrite String.eqb_refl; cbn in *. invert ND. exists nil. exists tail. cbn in *. split. { reflexivity. }
+    apply List.forallb_filter_id. apply List.forallb_forall.
+    intros [k v] I. cbn in *. destruct (String.eqb_spec x k). 2: { reflexivity. }
+    subst. contradiction H1. apply SetoidList.InA_alt. eexists. split. 2: { exact I. } reflexivity.
+  - invert ND. specialize (IH _ _ Logic.eq_refl H2) as [bl [br [-> ->]]].
+    do 2 eexists. split. { rewrite <- List.app_comm_cons. reflexivity. }
+    destruct (String.eqb_spec x k); cbn in *. 2: { reflexivity. }
+    subst. contradiction H1. apply SetoidList.InA_app_iff. right. left. reflexivity.
+Qed.
+
+Lemma remove_add {T} {x m} (N : ~In m x) (y : T)
+  : Eq m $ remove x $ overriding_add x y m.
+Proof.
+  intros k v. assert (R := remove_if_present_remove x $ overriding_add x y m); cbn in R; rewrite R; clear R.
+  rewrite find_overriding_add. split.
+  - intro F. assert (Nk : k <> x). { intros ->. apply N. eexists. exact F. }
+    split. { exact Nk. } right. split. { exact Nk. } exact F.
+  - intros [Nk [[-> ->] | [Nk' F]]]. { contradiction Nk. reflexivity. } exact F.
+Qed.
+
+Instance eq_key_equiv {T}
+  : RelationClasses.Equivalence (@MapCore.eq_key T).
+Proof.
+  unfold MapCore.eq_key. split. { intros []. reflexivity. } { intros [] []. cbn. intros ->. reflexivity. }
+  intros [] [] []. cbn. intros -> ->. reflexivity.
+Qed.
+
+Lemma bindings_add_split {T x} {m : to T} (N : ~In m x) y
+  : exists bl br, (
+    MapCore.bindings (overriding_add x y m) = bl ++ (x, y) :: br /\
+    MapCore.bindings m = bl ++ br
+  )%list.
+Proof.
+  eassert (agree : _); [| assert (F : Find (overriding_add x y m) x y);
+    [apply add_overriding; [exact agree | left; split; reflexivity] |]]. { intros z F. contradiction N. eexists. exact F. }
+  apply MapCore.bindings_spec1 in F as I. apply SetoidList.InA_split in I as [bl [[x' y'] [br [[Ex Ey] split]]]];
+  cbn in *; subst x'; subst y'. exists bl. exists br. split. { exact split. }
+  assert (RA := remove_add N y). apply bindings_eq in RA as ->. rewrite Map.bindings_remove. rewrite split.
+  rewrite List.filter_app. cbn. rewrite String.eqb_refl. cbn.
+  assert (ND := MapCore.bindings_spec2w $ overriding_add x y m). rewrite split in ND.
+  apply SetoidList.NoDupA_swap in ND. 2: { exact eq_key_equiv. } invert ND.
+  repeat rewrite List.forallb_filter_id; [reflexivity | |];
+  apply List.forallb_forall; intros [k v] I; cbn in *; destruct (String.eqb_spec x k);
+  try reflexivity; subst; contradiction H1; apply SetoidList.InA_app_iff; [right | left];
+  apply SetoidList.InA_alt; exists (k, v); (split; [reflexivity |]); exact I.
+Qed.
+
+Lemma sorted_eq_fst {T} {a : list (_ * T)} (S : Sorted.Sorted MapCore.lt_key a)
+  {b : list (_ * T)} (E : List.map fst a = List.map fst b)
+  : Sorted.Sorted MapCore.lt_key b.
+Proof.
+  generalize dependent b. induction S as [| [k v] tail S IH L]; intros; cbn in *. { destruct b. { constructor. } discriminate E. }
+  destruct b as [| [k' v'] tail']; invert E. constructor. { eapply IH. eassumption. }
+  invert L; destruct tail'; invert H1; constructor. unfold MapCore.lt_key in *. rewrite <- H2. assumption.
+Qed.
+
+Lemma in_a_eq_fst {T} {a : list (_ * T)} {x ya} (I : SetoidList.InA MapCore.eq_key (x, ya) a)
+  {b : list (_ * T)} (E : List.map fst a = List.map fst b) yb
+  : SetoidList.InA MapCore.eq_key (x, yb) b.
+Proof.
+  generalize dependent b. induction I as [[k v] tail | [k v] tail]; intros; destruct b as [| [k' v'] tail']; invert E.
+  - unfold MapCore.eq_key in H. cbn in *. subst. left. reflexivity.
+  - right. apply IHI. assumption.
+Qed.
+
+Lemma no_dup_eq_fst {T} {a : list (_ * T)} (ND : SetoidList.NoDupA MapCore.eq_key a)
+  {b : list (_ * T)} (E : List.map fst a = List.map fst b)
+  : SetoidList.NoDupA MapCore.eq_key b.
+Proof.
+  generalize dependent b. induction ND as [| [k v] tail N ND IH]; intros; cbn in *. { destruct b. { constructor. } discriminate E. }
+  destruct b as [| [k' v'] tail']; invert E. constructor. 2: { apply IH. assumption. }
+  intro I. apply N. eapply in_a_eq_fst. { exact I. } symmetry. assumption.
+Qed.
+
+Lemma bindings_overwrite_split {T m x} {orig : T} (F : Find m x orig) y
+  : exists bl br, (
+    MapCore.bindings (overwrite x y m) = bl ++ (x, y) :: br /\
+    MapCore.bindings m = bl ++ (x, orig) :: br
+  )%list.
+Proof.
+  assert (E : Map.Eq (overwrite x y m) $ overriding_add x y $ remove x m). {
+    intros k v. cbn. repeat rewrite find_overriding_add. split; (intros [[-> ->] | [N F']]; [left; split; reflexivity | right]);
+    (split; [exact N |]). { apply remove_if_present_remove. split. { exact N. } exact F'. }
+    apply remove_if_present_remove in F' as [N' F']. exact F'. }
+  apply bindings_eq in E as ->. assert (N : ~In (remove x m) x). {
+    intros [y' F']. apply remove_if_present_remove in F' as [[]]. reflexivity. }
+  assert (S := MapCore.bindings_spec2 $ overriding_add x y $ remove x m).
+  assert (ND := MapCore.bindings_spec2w $ overriding_add x y $ remove x m).
+  destruct (bindings_add_split N y) as [bl [br [Ea Er]]]. rewrite Ea in *; clear Ea N.
+  exists bl. exists br. split. { reflexivity. }
+  assert (S' := MapCore.bindings_spec2 m). assert (ND' := MapCore.bindings_spec2w m).
+  destruct (bindings_remove_split F) as [bl' [br' [E' Er']]]. rewrite E' in *; clear E'. rewrite Er' in *; clear Er'.
+  apply sorted_eq; try eassumption.
+  - eapply sorted_eq_fst. { exact S. } repeat rewrite List.map_app. reflexivity.
+  - eapply no_dup_eq_fst. { exact ND. } repeat rewrite List.map_app. reflexivity.
+  - intros [k v]. repeat rewrite SetoidList.InA_app_iff. repeat rewrite SetoidList.InA_cons.
+    repeat rewrite <- or_assoc. repeat rewrite (or_comm _ $ MapCore.eq_key_elt _ _). repeat rewrite or_assoc.
+    repeat rewrite <- SetoidList.InA_app_iff. rewrite Er. reflexivity.
+Qed.
