@@ -1,6 +1,9 @@
 From Coq Require
   String
   .
+From Coq Require Import
+  extraction.Extraction
+  .
 
 
 
@@ -75,3 +78,6 @@ Qed.
 
 Lemma eq_dec x y : {eq x y} + {~eq x y}.
 Proof. destruct (String.eqb_spec x y); [left | right]; assumption. Qed.
+
+Extract Constant eq_dec => "(=)".
+Extraction NoInline eq_dec.

@@ -53,18 +53,21 @@ Proof.
   - intros v C. apply find_iff in C. rewrite F in C. discriminate C.
 Qed.
 
+Extract Inlined Constant find_dec => "in_".
+
 Variant found {T} (m : to T) k : Type :=
   | Found (v : T) (Y : Find m k v)
   | NotFound (N : forall v, ~Find m k v)
   .
 
-(*Extract Inductive found => "option" [ "Some" "None" ]*)
-(*  "TODO".*)
+Extract Inductive found => "option" [ "Some" "None" ].
 
 Lemma found_dec {T} (m : to T) k : found m k. Proof.
   destruct (find m k) as [v |] eqn:F; [eleft | right]. { apply find_iff. exact F. }
   intros v C. apply find_iff in C. rewrite F in C. discriminate C.
 Defined.
+
+Extract Inlined Constant found_dec => "find".
 
 
 
@@ -1326,6 +1329,8 @@ Proof.
   - intro I. eapply Reflect.bool_iff in I. 2: { apply in_domain_or_range_spec. }
     rewrite I in E. discriminate E.
 Defined.
+
+Extract Inlined Constant in_domain_or_range_dec => "in_domain_or_range".
 
 
 

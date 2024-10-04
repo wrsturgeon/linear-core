@@ -1,3 +1,6 @@
+From Coq Require Import
+  extraction.Extraction
+  .
 From LinearCore Require Import
   Invert
   .
@@ -11,6 +14,8 @@ Variant Bool (P : Prop) : bool -> Prop :=
       : Bool P false
   .
 
+Extract Inductive Bool => "bool" [ "true" "false" ].
+
 
 
 Variant Option {T} (P : T -> Prop) : option T -> Prop :=
@@ -19,6 +24,8 @@ Variant Option {T} (P : T -> Prop) : option T -> Prop :=
   | N (N : forall x, ~P x)
       : Option P None
   .
+
+Extract Inductive Option => "option" [ "Some" "None" ].
 
 
 

@@ -191,3 +191,5 @@ Definition dec context term : step_or_not context term. Proof.
   - apply iff. eexists. split. { exact E. } apply Map.eq_refl.
   - intros context' term' C. apply iff in C as [context'' [E' Ec]]. rewrite E' in E. discriminate E.
 Defined.
+
+Extract Inlined Constant dec => "step".
