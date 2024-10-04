@@ -406,7 +406,7 @@
           );
           test-syntax = checker {
             buildPhase = ''
-              if ${rg} 'Admitted|Axiom|Conjecture|Parameter|Hypothesis|Hypotheses|Variable' -g '*.v' -g '!theories/NewNames.v'; then
+              if ${rg} 'Admitted|Axiom|Conjecture|Parameter|Hypothesis|Hypotheses|Variable' -g '*.v'; then
                 echo
                 echo 'SYNTAX ERROR: unverified assumption (above)'
                 exit 1

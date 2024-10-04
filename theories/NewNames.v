@@ -1,30 +1,149 @@
+From Coq Require Import
+  Ascii
+  String
+  .
+From Equations Require Import
+  Equations
+  .
 From LinearCore Require
   Map
   .
 From LinearCore Require Import
+  DollarSign
   Invert
   .
 
 
 
-Definition in_ := @Map.in_.
-Arguments in_/ {T} m k.
-
-Import String.
 Definition prime : String.string := "'".
 Arguments prime/.
 
-Axiom new_name : Map.set -> String.string -> String.string.
-Arguments new_name reserved orig_name.
-Extract Constant new_name =>
-  "fun reserved -> let rec new_name' name = if in_ reserved name then new_name' (name ^ prime) else name in new_name'".
+Definition next s : string := s ++ "'".
+Arguments next s/.
 
-Axiom not_in_new_name : forall reserved orig_name (I : Map.In reserved (new_name reserved orig_name)), False.
-Arguments not_in_new_name {reserved orig_name} I.
+Fixpoint prefix short long :=
+  match short with EmptyString => true | String head tail =>
+    match long with EmptyString => false | String head' tail' =>
+      andb (Ascii.eqb head head') $ prefix tail tail'
+    end
+  end.
+
+Lemma prefix_refl x
+  : prefix x x = true.
+Proof.
+  induction x; cbn in *. { reflexivity. } rewrite Ascii.eqb_refl. rewrite IHx. reflexivity.
+Qed.
+
+Lemma prefix_prime x
+  : prefix (x ++ "'") x = false.
+Proof. induction x; cbn in *. { reflexivity. } rewrite Ascii.eqb_refl; cbn. exact IHx. Qed.
+
+Fixpoint remove_prefix short long :=
+  match short with EmptyString => Some long | String head tail =>
+    match long with EmptyString => None | String head' tail' =>
+      if Ascii.eqb head head' then remove_prefix tail tail' else None
+    end
+  end.
+
+Lemma prefix_remove short long
+  : prefix short long = true <-> exists overflow, remove_prefix short long = Some overflow.
+Proof.
+  generalize dependent long. induction short; intros; cbn in *. { split. { eexists. reflexivity. } reflexivity. }
+  destruct long. { split. { intro D. discriminate D. } intros [? D]. discriminate D. }
+  destruct (Ascii.eqb_spec a a0); subst; cbn in *. { apply IHshort. }
+  split. { intro D. discriminate D. } intros [? D]. discriminate D.
+Qed.
+
+Lemma prefix_acc a b (E : prefix (a ++ "'") b = true)
+  : prefix a b = true.
+Proof.
+  generalize dependent b. induction a as [| xa a IH]; intros; cbn in *. { destruct b; reflexivity. }
+  destruct b as [| xb b]. { discriminate E. } destruct (Ascii.eqb_spec xa xb); subst; cbn in *. 2: { discriminate E. }
+  apply IH. exact E.
+Qed.
+
+Definition count_acc acc (f : _ -> bool) {T} : Map.to T -> nat := Map.fold (fun x _ => if f x then S else id) acc.
+Arguments count_acc acc f {T}/ m.
+
+Definition count := @count_acc 0.
+Arguments count/ f {T} m.
+
+(*
+Lemma pull_out_of_acc acc f {T} (m : Map.to T)
+  : count_acc acc f m = acc + count f m.
+Proof.
+  cbn. unfold Map.fold. repeat rewrite MapCore.fold_spec. remember (MapCore.bindings m) as b eqn:Eb; clear m Eb.
+  generalize dependent acc. induction b as [| [k v] tail IH]; intros; cbn in *. { symmetry. apply PeanoNat.Nat.add_0_r. }
+  repeat rewrite (IH $ _ _). rewrite PeanoNat.Nat.add_assoc. f_equal.
+  destruct f. { symmetry. apply PeanoNat.Nat.add_1_r. } unfold id. symmetry. apply PeanoNat.Nat.add_0_r.
+Qed.
+*)
+
+Lemma pull_out_of_acc acc orig_name {T} (li : list (_ * T))
+  : List.fold_left (fun a kv => (if prefix orig_name (fst kv) then S else id) a) li acc =
+    acc + List.fold_left (fun a kv => (if prefix orig_name (fst kv) then S else id) a) li 0.
+Proof.
+  generalize dependent orig_name. generalize dependent acc.
+  induction li as [| [k v] tail IH]; intros; cbn in *. { symmetry. apply PeanoNat.Nat.add_0_r. }
+  repeat rewrite (IH $ _ _). rewrite PeanoNat.Nat.add_assoc. f_equal.
+  destruct prefix. { symmetry. apply PeanoNat.Nat.add_1_r. } unfold id. symmetry. apply PeanoNat.Nat.add_0_r.
+Qed.
+
+Lemma le_prime x {T} (tail : list (_ * T))
+  : List.fold_left (fun a kv => (if prefix (x ++ "'") $ fst kv then S else id) a) tail 0 < S $
+    List.fold_left (fun a kv => (if prefix  x         $ fst kv then S else id) a) tail 0.
+Proof.
+  generalize dependent x. induction tail as [| [k v] tail IH]; intros; cbn in *. { constructor. }
+  repeat rewrite (pull_out_of_acc $ _ _). rewrite <- PeanoNat.Nat.add_succ_l.
+  destruct (prefix (x ++ "'") k) eqn:Ep'. { apply prefix_acc in Ep' as ->. cbn. apply -> PeanoNat.Nat.succ_lt_mono. apply IH. }
+  unfold id at 1. rewrite PeanoNat.Nat.add_0_l. destruct (prefix x k) eqn:Ep; cbn in *. 2: { apply IH. }
+  eapply PeanoNat.Nat.lt_trans. { apply IH. } apply -> PeanoNat.Nat.succ_lt_mono. apply PeanoNat.Nat.lt_succ_diag_r.
+Qed.
+
+Equations new_name (reserved : Map.set) (orig_name : string)
+  : string by wf (count (prefix orig_name) reserved) lt :=
+  new_name reserved orig_name with Map.found_dec reserved orig_name => {
+    | Map.NotFound => orig_name
+    | Map.Found _ => new_name reserved $ next orig_name
+  }.
+Next Obligation.
+  clear new_name. destruct v. unfold Map.fold. repeat rewrite MapCore.fold_spec. apply MapCore.bindings_spec1 in Y.
+  remember (MapCore.bindings reserved) as b eqn:Eb; clear reserved Eb. generalize dependent orig_name.
+  induction b as [| [k v] tail IH]; intros; cbn in *. { invert Y. } repeat rewrite (pull_out_of_acc $ _ _).
+  invert Y. { clear IH. destruct H0. cbn in *. subst. rewrite prefix_prime. rewrite prefix_refl. cbn. apply le_prime. }
+  specialize (IH _ H0). destruct (prefix (orig_name ++ "'") k) eqn:Ep'. {
+    apply prefix_acc in Ep' as ->. apply -> PeanoNat.Nat.succ_lt_mono. exact IH. }
+  destruct (prefix orig_name k) eqn:Ep; cbn in *. 2: { exact IH. }
+  eapply PeanoNat.Nat.lt_trans. { exact IH. } apply PeanoNat.Nat.lt_succ_diag_r. Qed.
+Fail Next Obligation.
+
+Lemma not_in_new_name {reserved orig_name}
+  (I : Map.In reserved $ new_name reserved orig_name)
+  : False.
+Proof.
+  funelim (new_name reserved orig_name); cbn in *.
+  - rewrite Heqcall in *. apply H in I as [].
+  - rewrite <- Heqcall in *. destruct I as [[] F]. apply N in F as [].
+Qed.
+
+Lemma unfold_new_name reserved orig_name
+  : new_name reserved orig_name = if Map.in_ reserved orig_name then new_name reserved $ next orig_name else orig_name.
+Proof.
+  funelim (new_name reserved orig_name); cbn in *.
+  - repeat rewrite Heqcall in *. assert (tmp := Y). apply Map.find_iff in tmp as ->. reflexivity.
+  - destruct (Map.find_spec reserved orig_name). { apply N in Y as []. } reflexivity.
+Qed.
 
 (* Yes, exactly equal, not just equivalent: *)
-Axiom new_name_det : forall r1 r2 (E : Map.Eq r1 r2) orig_name, new_name r1 orig_name = new_name r2 orig_name.
-Arguments new_name_det {r1 r2} E orig_name.
+Lemma new_name_det {r1 r2} (E : Map.Eq r1 r2) orig_name
+  : new_name r1 orig_name = new_name r2 orig_name.
+Proof.
+  generalize dependent r2. funelim (new_name r1 orig_name); intros; cbn in *. 2: {
+    rewrite unfold_new_name. destruct (Map.in_spec r2 orig_name). 2: { reflexivity. }
+    destruct Y as [[] F]. apply E in F. apply N in F as []. }
+  specialize (H _ E). rewrite (unfold_new_name r2). assert (F := Y). apply E in F.
+  unfold Map.in_. apply Map.find_iff in F as ->. apply H.
+Qed.
 
 
 
