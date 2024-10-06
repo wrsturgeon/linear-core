@@ -133,11 +133,12 @@ Equations indirect (context : Context.context) (t : Term.term) : Map.set by wf (
       Map.set_union (indirect context other_cases) (Map.minus (indirect context body_if_match) (BoundIn.pattern pattern));
   indirect _ _ := Map.empty.
 Next Obligation.
-  clear indirect. assert (BS := Map.bindings_remove_split Y). apply MapCore.bindings_spec1 in Y.
-  destruct BS as [bl [br [-> ->]]]; clear context Y. repeat rewrite List.fold_right_app. cbn.
+  clear indirect. assert (F := Y). apply MapCore.bindings_spec1 in F. destruct (Map.bindings_remove_split Y) as [bl [br [Ec Er]]].
+  clear Y. repeat rewrite Ec in *; repeat rewrite Er in *; clear context ownership Ec Er. repeat rewrite List.fold_right_app. cbn.
   induction bl as [| [k v] tail IH]; cbn in *. { apply PeanoNat.Nat.lt_succ_diag_r. }
   rewrite PeanoNat.Nat.add_assoc. rewrite (PeanoNat.Nat.add_comm $ Term.nodes looked_up). rewrite plus_n_Sm.
-  rewrite <- PeanoNat.Nat.add_assoc. apply PeanoNat.Nat.add_lt_mono_l. exact IH. Qed.
+  rewrite <- PeanoNat.Nat.add_assoc. apply PeanoNat.Nat.add_lt_mono_l. apply IH.
+  apply SetoidList.InA_app_iff. right. left. split; reflexivity. Qed.
 Next Obligation.
   rewrite <- PeanoNat.Nat.add_assoc. rewrite plus_n_Sm. apply PeanoNat.Nat.add_lt_mono_l.
   rewrite <- PeanoNat.Nat.add_succ_l. apply PeanoNat.Nat.lt_add_pos_l. apply PeanoNat.Nat.lt_0_succ. Qed.
@@ -146,18 +147,21 @@ Next Obligation.
   rewrite <- PeanoNat.Nat.add_assoc. rewrite plus_n_Sm. apply PeanoNat.Nat.add_lt_mono_l.
   rewrite <- PeanoNat.Nat.add_succ_l. apply PeanoNat.Nat.lt_add_pos_l. apply PeanoNat.Nat.lt_0_succ. Qed.
 Next Obligation.
-  rewrite <- PeanoNat.Nat.add_assoc. rewrite plus_n_Sm. apply PeanoNat.Nat.add_lt_mono_l.
-  rewrite <- PeanoNat.Nat.add_succ_l. apply PeanoNat.Nat.lt_add_pos_l. apply PeanoNat.Nat.lt_0_succ. Qed.
+  rewrite <- PeanoNat.Nat.add_assoc. repeat rewrite (plus_n_Sm $ Term.nodes type). apply PeanoNat.Nat.add_lt_mono_l.
+  repeat rewrite <- PeanoNat.Nat.add_succ_l. apply PeanoNat.Nat.lt_add_pos_l. apply PeanoNat.Nat.lt_0_succ. Qed.
 Next Obligation.
   rewrite (PeanoNat.Nat.add_comm $ Term.nodes type).
-  rewrite <- PeanoNat.Nat.add_assoc. rewrite plus_n_Sm. apply PeanoNat.Nat.add_lt_mono_l.
+  rewrite <- PeanoNat.Nat.add_assoc. repeat rewrite (plus_n_Sm $ Term.nodes body). apply PeanoNat.Nat.add_lt_mono_l.
+  repeat rewrite <- PeanoNat.Nat.add_succ_l. apply PeanoNat.Nat.lt_add_pos_l. apply PeanoNat.Nat.lt_0_succ. Qed.
+Next Obligation.
+  repeat rewrite <- PeanoNat.Nat.add_assoc. rewrite (PeanoNat.Nat.add_assoc $ Term.nodes body_if_match).
+  rewrite (PeanoNat.Nat.add_comm $ Term.nodes body_if_match). repeat rewrite PeanoNat.Nat.add_assoc.
+  rewrite (PeanoNat.Nat.add_comm $ Pattern.nodes _). repeat rewrite <- PeanoNat.Nat.add_assoc.
+  rewrite plus_n_Sm. apply PeanoNat.Nat.add_lt_mono_l. repeat rewrite PeanoNat.Nat.add_assoc.
   rewrite <- PeanoNat.Nat.add_succ_l. apply PeanoNat.Nat.lt_add_pos_l. apply PeanoNat.Nat.lt_0_succ. Qed.
 Next Obligation.
-  rewrite (PeanoNat.Nat.add_comm $ Term.nodes body_if_match).
-  rewrite <- PeanoNat.Nat.add_assoc. rewrite plus_n_Sm. apply PeanoNat.Nat.add_lt_mono_l.
-  rewrite <- PeanoNat.Nat.add_succ_l. apply PeanoNat.Nat.lt_add_pos_l. apply PeanoNat.Nat.lt_0_succ. Qed.
-Next Obligation.
-  rewrite <- PeanoNat.Nat.add_assoc. rewrite plus_n_Sm. apply PeanoNat.Nat.add_lt_mono_l.
+  rewrite (PeanoNat.Nat.add_comm $ Pattern.nodes _). repeat rewrite <- PeanoNat.Nat.add_assoc.
+  rewrite plus_n_Sm. apply PeanoNat.Nat.add_lt_mono_l. repeat rewrite PeanoNat.Nat.add_assoc.
   rewrite <- PeanoNat.Nat.add_succ_l. apply PeanoNat.Nat.lt_add_pos_l. apply PeanoNat.Nat.lt_0_succ. Qed.
 Fail Next Obligation.
 

@@ -137,11 +137,12 @@ Theorem shape_or_ref_cant_step
   {updated_context updated_term} (step : Step context term updated_context updated_term)
   : False.
 Proof.
-  generalize dependent updated_term. generalize dependent updated_context.
-  induction shaped; intros; try solve [invert step]. 2: { invert step; try solve [invert curried_resource].
-    eapply shapes_cant_step in curried_resource as []. exact reduce_function. }
-  invert step. destruct (Map.find_det F lookup). assert (Ew := Map.remove_det remove_self_from_context eq_refl (Map.eq_refl _) R).
-  eapply IHshaped. eapply eq. { exact step_in_context. } { exact Ew. } { reflexivity. } { apply Map.eq_refl. } reflexivity.
+  invert shaped. 2: { eapply shapes_cant_step; eassumption. } generalize dependent shaped0. generalize dependent updated_term.
+  generalize dependent updated_context. generalize dependent shape. induction follow_references; intros; cbn in *; subst. {
+    invert step. destruct (Map.find_det lookup lookup0). eapply shapes_cant_step. { exact shaped0. } exact step_in_context. }
+  invert step. destruct (Map.find_det lookup lookup0). eapply IHfollow_references. 2: { exact shaped0. }
+  eapply eq; try reflexivity. { exact step_in_context. } 2: { apply Map.eq_refl. }
+  eapply Map.remove_det; try eassumption. { reflexivity. } apply Map.eq_refl.
 Qed.
 
 

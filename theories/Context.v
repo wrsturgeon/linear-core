@@ -18,37 +18,43 @@ Arguments context/.
 
 
 
-Inductive FollowReferences (context : context) : Term.term -> Term.term -> Prop :=
-  | Ref {name term} (F : Map.Find context name term)
-      {without_self} (R : Map.Remove name context without_self)
-      {followed} (transitive : FollowReferences without_self term followed)
-      : FollowReferences context (Term.Var name Ownership.Referenced) followed
-  | Nonref {term} (N : forall name (E : term = Term.Var name Ownership.Referenced), False)
-      {followed} (E : term = followed)
-      : FollowReferences context term followed
+Inductive FollowReferences (context : context) symlink : String.string -> Term.term -> Prop :=
+  | Immediate
+      {looked_up} (lookup : Map.Find context symlink looked_up)
+      (N : forall id, looked_up <> Term.Var id Ownership.Referenced)
+      : FollowReferences context symlink symlink looked_up
+  | Indirect
+      {next} (lookup : Map.Find context symlink $ Term.Var next Ownership.Referenced)
+      {without_symlink} (remove_symlink_from_context : Map.Remove symlink context without_symlink)
+      {real_name looked_up} (transitive : FollowReferences without_symlink next real_name looked_up)
+      : FollowReferences context symlink real_name looked_up
   .
-Arguments FollowReferences context term followed.
+Arguments FollowReferences context symlink real_name looked_up.
 
-Lemma follow_references_det {c1 t1 t1'} (F1 : FollowReferences c1 t1 t1')
-  {c2} (Ec : Map.Eq c1 c2) {t2} (Et : t1 = t2) {t2'} (F2 : FollowReferences c2 t2 t2')
-  : t1' = t2'.
+Lemma follow_references_eq {c1 n1 r1 y1} (F1 : FollowReferences c1 n1 r1 y1)
+  {c2} (Ec : Map.Eq c1 c2) {n2} (En : n1 = n2) {r2} (Er : r1 = r2) {y2} (Ey : y1 = y2)
+  : FollowReferences c2 n2 r2 y2.
 Proof.
-  subst. rename t2 into t. generalize dependent t2'. generalize dependent c2. induction F1; intros.
-  - invert F2. 2: { contradiction (N name). reflexivity. }
-    apply Ec in F0. destruct (Map.find_det F F0). eapply IHF1. 2: { exact transitive. }
-    eapply Map.remove_det. { exact R. } { reflexivity. } { exact Ec. } exact R0.
-  - subst. invert F2. { contradiction (N name). reflexivity. } reflexivity.
+  subst. rename n2 into n. rename r2 into r. rename y2 into y. generalize dependent c2.
+  induction F1; intros; cbn in *. { left. { apply Ec. exact lookup. } exact N. }
+  eright. { apply Ec. exact lookup. } { eapply Map.remove_eq; try eassumption. { reflexivity. } apply Map.eq_refl. }
+  apply IHF1. eapply Map.remove_det. { eassumption. } 3: { eassumption. } { reflexivity. } apply Map.eq_refl.
 Qed.
 
-Lemma follow_references_eq {c1 t1 t1'} (F1 : FollowReferences c1 t1 t1')
-  {c2} (Ec : Map.Eq c1 c2) {t2} (Et : t1 = t2) {t2'} (Et' : t1' = t2')
-  : FollowReferences c2 t2 t2'.
+Lemma follow_references_det {c1 n1 r1 y1} (F1 : FollowReferences c1 n1 r1 y1)
+  {c2} (Ec : Map.Eq c1 c2) {n2} (En : n1 = n2) {r2 y2} (F2 : FollowReferences c2 n2 r2 y2)
+  : r1 = r2 /\ y1 = y2.
 Proof.
-  subst. rename t2 into t. rename t2' into t'. generalize dependent c2. induction F1; intros.
-  - econstructor. { apply Ec. exact F. } 2: { exact F1. }
-    eapply Map.remove_eq. { exact R. } { reflexivity. } { exact Ec. } apply Map.eq_refl.
-  - subst. constructor. { exact N. } reflexivity.
+  subst. rename n2 into n. generalize dependent y2. generalize dependent r2. generalize dependent c2. induction F1; intros.
+  - invert F2; apply Ec in lookup0; destruct (Map.find_det lookup0 lookup); [split | edestruct N]; reflexivity.
+  - invert F2; apply Ec in lookup0. { destruct (Map.find_det lookup lookup0). edestruct N. reflexivity. }
+    assert (E := Map.find_det lookup0 lookup). invert E. eapply IHF1. 2: { exact transitive. }
+    eapply Map.remove_det; try eassumption. reflexivity.
 Qed.
+
+Lemma follow_references_find {c n r y} (F : FollowReferences c n r y)
+  : Map.Find c r y.
+Proof. cbn. induction F. { exact lookup. } apply remove_symlink_from_context in IHF as [N IH]. exact IH. Qed.
 
 
 
@@ -57,12 +63,13 @@ Instance wf : Classes.WellFounded $ Telescopes.tele_measure
   (fun context (_ : Term.term) => Map.cardinality context)  lt.
 Proof. apply Telescopes.wf_tele_measure. exact Subterm.lt_wf. Qed.
 
-Equations follow_references (context : Context.context) (term : Term.term)
-  : option Term.term by wf (Map.cardinality context) lt :=
-  follow_references context $ Term.Var name Ownership.Referenced with Map.found_dec context name => {
-  | Map.NotFound => None
-  | @Map.Found next _ => follow_references (Map.remove name context) next };
-  follow_references _ term := Some term.
+Equations follow_references (context : Context.context) (symlink : String.string)
+  : option (String.string * Term.term) by wf (Map.cardinality context) lt :=
+  follow_references context symlink with Map.found_dec context symlink => {
+    | Map.NotFound => None
+    | @Map.Found (Term.Var next Ownership.Referenced) _ => follow_references (Map.remove symlink context) next
+    | @Map.Found looked_up _ => Some (symlink, looked_up)
+  }.
 Next Obligation.
   clear follow_references. rewrite Map.cardinality_remove. apply Map.find_iff in Y as E. rewrite E. clear E.
   unfold Map.cardinality. rewrite MapCore.cardinal_spec. apply MapCore.bindings_spec1 in Y.
@@ -70,31 +77,19 @@ Next Obligation.
   cbn. apply PeanoNat.Nat.lt_succ_diag_r. Qed.
 Fail Next Obligation.
 
-Lemma follow_references_spec context term
-  : Reflect.Option (FollowReferences context term) (follow_references context term).
+Lemma follow_references_spec context symlink
+  : Reflect.Option (fun kv => FollowReferences context symlink (fst kv) $ snd kv) (follow_references context symlink).
 Proof.
-  funelim (follow_references context term).
-  - constructor. constructor. { intros ? D. discriminate D. } reflexivity.
-  - constructor. constructor. { intros ? D. discriminate D. } reflexivity.
-  - constructor. constructor. { intros ? D. discriminate D. } reflexivity.
-  - constructor. constructor. { intros ? D. discriminate D. } reflexivity.
-  - constructor. constructor. { intros ? D. discriminate D. } reflexivity.
-  - destruct H; constructor. { econstructor. { exact Y. } { apply Map.remove_remove. eexists. exact Y. } exact Y0. }
-    intros t C. invert C. 2: { eapply N0. reflexivity. } eapply N. eapply follow_references_eq.
-    + exact transitive.
-    + eapply Map.remove_det. { exact R. } { reflexivity. } { apply Map.eq_refl. } apply Map.remove_remove. eexists. exact F.
-    + eapply Map.find_det. { exact F. } exact Y.
-    + reflexivity.
-  - constructor. intros t C. invert C. { apply N in F as []. } eapply N0. reflexivity.
-Qed.
-
-Lemma follow_maps_to_last {context name followed} (F : FollowReferences context (Term.Var name Ownership.Referenced) followed)
-  : exists second_to_last, Map.Find context second_to_last followed.
-Proof.
-  remember (Term.Var name Ownership.Referenced) as r eqn:Er. generalize dependent name. induction F; intros; subst.
-  - symmetry in Er. invert Er. invert F0. 2: { eexists. exact F. }
-    specialize (IHF _ eq_refl) as [second_to_last IH]. apply R in IH as [N IH]. eexists. exact IH.
-  - edestruct N as []. reflexivity.
+  funelim (follow_references context symlink); try solve [constructor; cbn; left; [exact Y |]; intros ? D; discriminate D].
+  - destruct H.
+    + destruct x as [k v]. cbn in *. left. cbn. eright. { exact Y. } 2: { exact Y0. }
+      apply Map.remove_remove. eexists. exact Y.
+    + constructor. intros [k v] C. cbn in *. invert C. { destruct (Map.find_det Y lookup). eapply N0. reflexivity. }
+      apply (N (k, v)). cbn. assert (E := Map.find_det lookup Y).
+      invert E. eapply follow_references_eq; try exact transitive; try reflexivity.
+      eapply Map.remove_det. { exact remove_symlink_from_context. } { reflexivity. } { apply Map.eq_refl. }
+      apply Map.remove_remove. eexists. exact Y.
+  - constructor. intros [k v] C; cbn in *. invert C; apply N in lookup as [].
 Qed.
 
 

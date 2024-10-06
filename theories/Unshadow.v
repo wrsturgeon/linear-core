@@ -60,6 +60,36 @@ Arguments unshadow/ t.
 
 
 
+Lemma nodes_eq_acc {acc reserved t reserved' r} (E : unshadow_acc acc reserved t = Some (reserved', r))
+  : Term.nodes r = Term.nodes t.
+Proof.
+  generalize dependent r. generalize dependent reserved'. generalize dependent reserved. generalize dependent acc.
+  induction t; intros; cbn in *.
+  - invert E. reflexivity.
+  - destruct Map.find; invert E. reflexivity.
+  - destruct unshadow_acc as [[tmp f'] |] eqn:E1 in E. 2: { discriminate E. }
+    destruct unshadow_acc as [[tmp' a'] |] eqn:E2 in E; invert E. cbn.
+    specialize (IHt1 _ _ _ _ E1) as ->. specialize (IHt2 _ _ _ _ E2) as ->. reflexivity.
+  - destruct unshadow_acc as [[tmp f'] |] eqn:E1 in E. 2: { discriminate E. }
+    destruct unshadow_acc as [[tmp' a'] |] eqn:E2 in E; invert E. cbn.
+    specialize (IHt1 _ _ _ _ E1) as ->. specialize (IHt2 _ _ _ _ E2) as ->. reflexivity.
+  - destruct unshadow_acc as [[tmp f'] |] eqn:E2 in E. 2: { discriminate E. }
+    destruct Rename.pattern eqn:Ep. 2: { discriminate E. }
+    destruct unshadow_acc as [[tmp' a'] |] eqn:E1 in E; invert E. cbn.
+    specialize (IHt1 _ _ _ _ E1) as ->. specialize (IHt2 _ _ _ _ E2) as ->.
+    apply Rename.pattern_nodes_eq in Ep as ->. reflexivity.
+Qed.
+
+Lemma nodes_eq_reserve {reserved t r} (E : unshadow_reserve reserved t = Some r)
+  : Term.nodes r = Term.nodes t.
+Proof. unfold unshadow_reserve in E. destruct unshadow_acc as [[] |] eqn:E'; invert E. eapply nodes_eq_acc. exact E'. Qed.
+
+Lemma nodes_eq {t r} (E : unshadow t = Some r)
+  : Term.nodes r = Term.nodes t.
+Proof. eapply nodes_eq_reserve. exact E. Qed.
+
+
+
 Variant Equiv : option (Map.set * Term.term) -> _ -> Prop :=
   | ENone
       : Equiv None None

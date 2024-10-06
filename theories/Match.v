@@ -248,6 +248,14 @@ Proof.
       right; apply IHS; [left | right]; assumption.
 Qed.
 
+Lemma in_strict_ref_context {context name looked_up} (lookup : Map.Find context name looked_up)
+  {strict scrutinee cleaved context_with_matches} (S : StrictRef context strict scrutinee cleaved context_with_matches)
+  : Map.Find context_with_matches name looked_up.
+Proof.
+  generalize dependent looked_up. generalize dependent name. induction S; intros. { apply E. exact lookup. }
+  apply A. right. apply IHS. exact lookup.
+Qed.
+
 Lemma compatible_strict_ref_iff strict (WF : WellFormed.Strict strict) context
   : CompatibleStrict context strict <->
     exists scrutinee cleaved context_with_matches,
@@ -278,11 +286,11 @@ Proof. induction S. { invert B. } invert B. { apply IHS in bound_in_function as 
 Variant MoveOrReference (context : Context.context) : Pattern.move_or_reference -> Term.term -> Context.context -> Prop :=
   | Mov strict scrutinee context_with_matches (S : Strict context strict scrutinee context_with_matches)
       : MoveOrReference context (Pattern.Mov strict) scrutinee context_with_matches
-  | Ref
-      {name scrutinee} (follow_references : Context.FollowReferences context (Term.Var name Ownership.Referenced) scrutinee)
+  | Ref {symlink name scrutinee} (follow_references
+        : Context.FollowReferences context symlink name scrutinee)
       strict old_context_with_matches cleaved (S : StrictRef context strict scrutinee cleaved old_context_with_matches)
       context_with_matches (OW : Map.Overwrite name cleaved old_context_with_matches context_with_matches)
-      : MoveOrReference context (Pattern.Ref strict) (Term.Var name Ownership.Referenced) context_with_matches
+      : MoveOrReference context (Pattern.Ref strict) (Term.Var symlink Ownership.Referenced) context_with_matches
   .
 Arguments MoveOrReference context strict scrutinee context_with_matches.
 
@@ -300,8 +308,7 @@ Proof.
   cbn. econstructor.
   - econstructor.
     + apply Map.find_overriding_add. left. split; reflexivity.
-    + apply Map.remove_remove. apply Map.in_overriding_add. left. reflexivity.
-    + constructor. { intros ? D. discriminate D. } reflexivity.
+    + intros ? D. discriminate D.
   - econstructor.
     + constructor. intros x y. rewrite Map.find_singleton. rewrite Map.find_overriding_add.
       split. { intros [[-> ->] | [N' F]]. { split; reflexivity. } invert F. }
@@ -335,8 +342,7 @@ Proof.
   cbn. econstructor.
   - econstructor.
     + apply Map.find_overriding_add. left. split; reflexivity.
-    + apply Map.remove_remove. apply Map.in_overriding_add. left. reflexivity.
-    + constructor. { intros ? D. discriminate D. } reflexivity.
+    + intros ? D. discriminate D.
   - econstructor.
     + econstructor.
       * constructor. intros x y. rewrite Map.find_singleton. rewrite Map.find_overriding_add.
@@ -372,8 +378,8 @@ Definition move_or_reference context pattern scrutinee :=
       end
   | Pattern.Ref s =>
       match scrutinee with
-      | Term.Var name Ownership.Referenced =>
-          match Context.follow_references context scrutinee with None => None | Some term =>
+      | Term.Var symlink Ownership.Referenced =>
+          match Context.follow_references context symlink with None => None | Some (name, term) =>
             match strict_ref context s term with None => None | Some (cleaved, context_with_matches) =>
               Some $ Map.overwrite name cleaved context_with_matches
             end
@@ -390,14 +396,9 @@ Lemma move_or_reference_det
   m2 (S2 : MoveOrReference c2 p2 t2 m2)
   : Map.Eq m1 m2.
 Proof.
-  subst. invert S1; invert S2.
-  - eapply strict_det; try reflexivity; eassumption.
-  - invert follow_references. 2: { contradiction (N name). reflexivity. }
-    invert follow_references0. 2: { contradiction (N name). reflexivity. }
-    assert (Ew := Map.remove_det R eq_refl Ec R0). apply Ec in F0. destruct (Map.find_det F F0).
-    destruct (Context.follow_references_det transitive Ew eq_refl transitive0).
-    destruct (strict_ref_det S Ec eq_refl eq_refl S0) as [-> Eo].
-    eapply Map.overwrite_det; try reflexivity; eassumption.
+  subst. invert S1; invert S2. { eapply strict_det; try reflexivity; eassumption. }
+  destruct (Context.follow_references_det follow_references Ec eq_refl follow_references0) as [<- <-].
+  destruct (strict_ref_det S Ec eq_refl eq_refl S0) as [<- Eo]. eapply Map.overwrite_det; try eassumption; reflexivity.
 Qed.
 
 Lemma move_or_reference_eq
@@ -411,7 +412,7 @@ Proof.
   invert MR.
   - constructor. eapply strict_eq; try reflexivity; eassumption.
   - econstructor.
-    + eapply Context.follow_references_eq. { exact follow_references. } { exact Ec. } { reflexivity. } reflexivity.
+    + eapply Context.follow_references_eq. { exact follow_references. } { exact Ec. } { reflexivity. } { reflexivity. } reflexivity.
     + eapply strict_ref_eq; try reflexivity; try eassumption. apply Map.eq_refl.
     + eapply Map.overwrite_eq; try reflexivity; try eassumption. apply Map.eq_refl.
 Qed.
@@ -434,12 +435,13 @@ Proof.
   - cbn. destruct (strict_spec context strict0 scrutinee); constructor. { constructor. exact Y. }
     intros x MR. invert MR. apply N in S as [].
   - destruct scrutinee; try (constructor; intros m C; invert C). destruct ownership. { constructor. intros m C. invert C. }
-    destruct (Context.follow_references_spec context $ Term.Var name Ownership.Referenced). 2: {
-      constructor. intros m C. invert C. apply N in follow_references as []. }
-    destruct (strict_ref_spec context strict0 x) as [[cleaved context_with_matches] |]. 2: { constructor. intros m C. invert C.
-      destruct (Context.follow_references_det Y (Map.eq_refl _) eq_refl follow_references). apply (N (_, _)) in S as []. }
+    destruct (Context.follow_references_spec context name). 2: {
+      constructor. intros m C. invert C. apply (N (_, _)) in follow_references as []. }
+    destruct x as [k v]. cbn in *. destruct (strict_ref_spec context strict0 v) as [[cleaved context_with_matches] |]. 2: {
+      constructor. intros m C. invert C. destruct (Context.follow_references_det Y (Map.eq_refl _) eq_refl follow_references).
+      subst. apply (N (_, _)) in S as []. }
     cbn in *. constructor. econstructor; try eassumption. apply Map.overwrite_overwrite.
-    invert Y. 2: { contradiction (N name). reflexivity. } eapply in_strict_ref. { exact Y0. } right. eexists. exact F.
+    eapply in_strict_ref. { exact Y0. } right. apply Context.follow_references_find in Y. eexists. exact Y.
 Qed.
 
 Variant CompatibleMoveOrReference context : Pattern.move_or_reference -> Prop :=
@@ -611,8 +613,7 @@ Proof.
   - eapply unshadow_strict. { exact Ut. } { exact Uc. } exact S.
   - eapply unshadow_strict_ref in S as [U FA].
     + cbn. intros. apply OW in F as [[-> ->] | [N F]]. { exact U. } eapply FA. exact F.
-    + destruct (Context.follow_maps_to_last follow_references) as [second_to_last F].
-      invert follow_references. 2: { contradiction (N name). reflexivity. } eapply Uc. exact F.
+    + eapply Uc. eapply Context.follow_references_find. exact follow_references.
     + exact Uc.
 Qed.
 
@@ -638,18 +639,338 @@ Lemma strict_ref_shaped {context pattern scrutinee cleaved context_with_matches}
   : Shape.ShapeOf scrutinee Shape.Resource.
 Proof. induction M; constructor. exact IHM. Qed.
 
-Lemma follow_references_shaped {context term followed} (FR : Context.FollowReferences context term followed)
+Lemma follow_references_shaped {context symlink name followed} (FR : Context.FollowReferences context symlink name followed)
   (S : Shape.ShapeOf followed Shape.Resource)
-  : Shape.ShapeOrRef context term Shape.Resource.
-Proof.
-  generalize dependent S. induction FR; intros. 2: { subst. apply Shape.or_ref. exact S. }
-  econstructor. { exact F. } { exact R. } apply IHFR. exact S.
-Qed.
+  : Shape.ShapeOrRef context followed Shape.Resource.
+Proof. generalize dependent S. induction FR; intros; apply Shape.or_ref; exact S. Qed.
 
 Lemma move_or_reference_shape_or_ref {context pattern scrutinee context_with_matches}
   (M : MoveOrReference context pattern scrutinee context_with_matches)
   : Shape.ShapeOrRef context scrutinee Shape.Resource.
 Proof.
   invert M. { apply Shape.or_ref. eapply strict_shaped. exact S. }
-  assert (SO := strict_ref_shaped S). eapply follow_references_shaped. { exact follow_references. } exact SO.
+  econstructor. { exact follow_references. } eapply strict_ref_shaped. exact S.
+Qed.
+
+
+
+Lemma pull_out_of_acc add acc (li : list (MapCore.key * Term.term))
+  : List.fold_right (fun kv => Nat.add $ Term.nodes $ snd kv) (add + acc) li =
+    add + List.fold_right (fun kv => Nat.add $ Term.nodes $ snd kv) acc li.
+Proof.
+  generalize dependent acc. generalize dependent add.
+  induction li as [| [k v] tail IH]; intros; cbn in *. { reflexivity. }
+  rewrite PeanoNat.Nat.add_assoc. rewrite (PeanoNat.Nat.add_comm add $ Term.nodes v).
+  rewrite <- PeanoNat.Nat.add_assoc. f_equal. apply IH.
+Qed.
+
+Lemma strict_decreasing {context pattern scrutinee context_with_matches}
+  (M : Strict context pattern scrutinee context_with_matches) other_cases
+  : List.fold_right (fun kv => Nat.add $ Term.nodes $ snd kv) 0 (MapCore.bindings context_with_matches) <
+    Pattern.strict_nodes pattern + Term.nodes other_cases + Term.nodes scrutinee +
+    List.fold_right (fun kv => Nat.add $ Term.nodes $ snd kv) 0 (MapCore.bindings context).
+Proof.
+  generalize dependent other_cases. induction M; intros; cbn in *. {
+    rewrite (PeanoNat.Nat.add_comm _ 1). cbn. apply Map.bindings_eq in E as ->.
+    repeat rewrite <- PeanoNat.Nat.add_succ_l. apply PeanoNat.Nat.lt_add_pos_l. apply PeanoNat.Nat.lt_0_succ. }
+  eassert (agree : _); [| assert (A' := @Map.add_overriding _ argument_name argument context_with_function_matches agree)]. {
+    intros y F. contradiction N. eexists. exact F. }
+  eapply Map.add_det in A'; try reflexivity. 2: { exact A. } 2: { apply Map.eq_refl. }
+  apply Map.bindings_eq in A' as ->. destruct (Map.bindings_add_split N argument) as [bl [br [E1 E2]]]. rewrite E1.
+  rewrite List.fold_right_app. cbn. rewrite pull_out_of_acc. rewrite <- List.fold_right_app. rewrite <- E2.
+  rewrite (PeanoNat.Nat.add_comm _ $ Term.nodes argument). rewrite PeanoNat.Nat.add_succ_r. rewrite PeanoNat.Nat.add_assoc.
+  rewrite (PeanoNat.Nat.add_comm _ $ Term.nodes argument). rewrite PeanoNat.Nat.add_succ_l.
+  repeat rewrite <- PeanoNat.Nat.add_assoc. repeat rewrite <- (PeanoNat.Nat.add_succ_r $ Term.nodes argument).
+  apply PeanoNat.Nat.add_lt_mono_l. rewrite PeanoNat.Nat.add_assoc. eapply PeanoNat.Nat.lt_trans. { exact (IHM other_cases). }
+  eapply PeanoNat.Nat.lt_trans. { apply PeanoNat.Nat.lt_succ_diag_r. }
+  apply -> PeanoNat.Nat.succ_lt_mono. rewrite PeanoNat.Nat.add_assoc.
+  eapply PeanoNat.Nat.lt_trans. { apply PeanoNat.Nat.lt_succ_diag_r. }
+  apply -> PeanoNat.Nat.succ_lt_mono. apply PeanoNat.Nat.lt_succ_diag_r.
+Qed.
+
+(*
+Lemma no_dup_app {T P} (E : RelationClasses.Equivalence P) {a b : list T} (ND : SetoidList.NoDupA P (a ++ b))
+  : SetoidList.NoDupA P a /\ SetoidList.NoDupA P b /\ (forall x, SetoidList.InA P x a -> SetoidList.InA P x b -> False).
+Proof.
+  generalize dependent b. induction a as [| head tail IH]; intros; cbn in *. {
+    split. { constructor. } split. { exact ND. } intros x Ia Ib. invert Ia. }
+  invert ND. specialize (IH _ H2) as [IHa [IHb IHd]]. split. 2: {
+    split. { exact IHb. } intros. invert H. 2: { eapply IHd; eassumption. }
+    apply H1. apply SetoidList.InA_app_iff. right. eapply SetoidList.InA_eqA; eassumption. }
+  constructor. 2: { exact IHa. } intro I. apply H1. apply SetoidList.InA_app_iff. left. exact I.
+Qed.
+
+Lemma rev_eq {T} (a b : list T)
+  : a = b <-> List.rev a = List.rev b.
+Proof. split. { intros ->. reflexivity. } intro E. apply List.rev_inj in E as ->. reflexivity. Qed.
+
+Lemma cons_nil_app {T} (x : T) xs
+  : ((x :: nil) ++ xs = x :: xs)%list.
+Proof. reflexivity. Qed.
+
+Lemma no_dup_tail {T P} {x : T} {xs} (ND : SetoidList.NoDupA P (x :: xs)%list)
+  : SetoidList.NoDupA P xs.
+Proof. invert ND. assumption. Qed.
+
+Lemma split_align {x1 x2} (N : x1 <> x2)
+  {T} (dec : forall a b : T, {a = b} + {a <> b}) {y1 y2 : T}
+  {l1 r1} (ND1 : SetoidList.NoDupA MapCore.eq_key (l1 ++ (x1, y1) :: r1)%list)
+  {l2 r2} (ND2 : SetoidList.NoDupA MapCore.eq_key (l2 ++ (x2, y2) :: r2)%list)
+  (E : (l1 ++ (x1, y1) :: r1)%list = (l2 ++ (x2, y2) :: r2)%list)
+  : ((
+    exists l3 r3, l1 = l3 ++ (x2, y2) :: r3 /\ r2 = r3 ++ (x1, y1) :: r1
+  ) \/ (
+    exists l3 r3, r1 = l3 ++ (x2, y2) :: r3 /\ l2 = l1 ++ (x1, y1) :: l3
+  ))%list.
+Proof.
+  apply SetoidList.NoDupA_swap in ND1. 2: { exact Map.eq_key_equiv. }
+  apply SetoidList.NoDupA_swap in ND2. 2: { exact Map.eq_key_equiv. }
+  invert ND1. invert ND2. rewrite SetoidList.InA_app_iff in *.
+  assert (pair_dec : ListDec.decidable_eq (String.string * T)). {
+    intros [k1 v1] [k2 v2]. destruct (String.eqb_spec k1 k2). 2: { right. intro D. apply n. invert D. reflexivity. }
+    destruct (dec v1 v2); subst; [left | right]. { reflexivity. } intro D. apply n. invert D. reflexivity. }
+  destruct (ListDec.In_decidable pair_dec (x2, y2) l1); [left | right].
+  - apply List.in_split in H as [l' [r' ->]]. do 2 eexists. split. { reflexivity. }
+    rewrite <- List.app_assoc in E. rewrite <- List.app_comm_cons in E. generalize dependent r'. generalize dependent l'.
+    generalize dependent r2. generalize dependent r1. induction l2 as [| [k2 v2] l2 IH]; intros; cbn in *.
+    + destruct l'; invert E; cbn in *. { reflexivity. }
+      contradiction H3. right. apply SetoidList.InA_app_iff. right. left. reflexivity.
+    + destruct l'; invert E; cbn in *. { contradiction H3. left. left. reflexivity. } eapply IH; try eassumption.
+      * intros [C | C]; apply H3; repeat constructor; exact C.
+      * invert H4. assumption.
+      * invert H2. apply no_dup_app in H7 as [ND1 [ND2 D]].
+        apply SetoidList.NoDupA_app. { exact Map.eq_key_equiv. } { exact ND1. } { exact ND2. } { exact D. } exact Map.eq_key_equiv.
+      * intros [C | C]; apply H1; repeat constructor; exact C.
+  - destruct (ListDec.In_decidable pair_dec (x2, y2) r1).
+    + apply List.in_split in H0 as [l' [r' ->]]. do 2 eexists. split. { reflexivity. }
+      apply rev_eq in E. repeat (rewrite List.rev_app_distr in E; cbn in E); repeat rewrite <- List.app_assoc in E; cbn in E.
+      generalize dependent r'. generalize dependent l'. generalize dependent l2. generalize dependent l1.
+      remember (List.rev r2) as r eqn:R. generalize dependent r2. induction r; intros; cbn in *. {
+        apply rev_eq in R. rewrite List.rev_involutive in R. subst. destruct (List.rev r') eqn:R; invert E; cbn in *. {
+          apply rev_eq in R. rewrite List.rev_involutive in R. subst. cbn in *.
+          apply rev_eq in H5. repeat (rewrite List.rev_app_distr in H5; cbn in H5).
+          repeat rewrite List.rev_involutive in H5. subst. rewrite <- List.app_assoc. reflexivity. }
+        apply rev_eq in H6. repeat (rewrite List.rev_app_distr in H6; cbn in H6). repeat rewrite List.rev_involutive in H6.
+        repeat rewrite <- List.app_assoc in H6. cbn in H6. subst. contradiction H3. left. apply SetoidList.InA_app_iff.
+        right. right. apply SetoidList.InA_app_iff. right. left. reflexivity. }
+      apply rev_eq in R. cbn in R. rewrite List.rev_involutive in R. subst. destruct (List.rev r') eqn:R; invert E; cbn in *. {
+        apply rev_eq in R. rewrite List.rev_involutive in R. cbn in *. subst. contradiction H3. right.
+        apply SetoidList.InA_app_iff. right. left. reflexivity. }
+      eapply IHr. 7: { rewrite <- H6. f_equal. apply List.rev_involutive. } { symmetry. apply List.rev_involutive. } all: try eassumption.
+      * intros [C | C]; apply H3. { left. exact C. } right. apply SetoidList.InA_app_iff. left. exact C.
+      * apply no_dup_app in H2 as [ND1 [ND2 D]]. 2: { exact Map.eq_key_equiv. }
+        rewrite List.app_assoc in H4. apply no_dup_app in H4 as [ND1' [ND2' D']]. { exact ND1'. } exact Map.eq_key_equiv.
+      * apply no_dup_app in H2 as [ND1 [ND2 D]]. 2: { exact Map.eq_key_equiv. }
+        apply SetoidList.NoDupA_app. { exact Map.eq_key_equiv. } { exact ND1. } 2: {
+          intros. eapply D. { exact H0. } apply SetoidList.InA_app_iff.
+          apply SetoidList.InA_app_iff in H2 as [C | C]; [left | right]. { exact C. } invert C; [left | right]. { assumption. }
+          apply SetoidList.InA_rev. rewrite R. right. apply SetoidList.InA_rev. assumption. }
+        apply no_dup_app in ND2 as [ND1' [ND2' D']]. 2: { exact Map.eq_key_equiv. } invert ND2'.
+        apply SetoidList.NoDupA_app. { exact Map.eq_key_equiv. } { exact ND1'. } 2: { intros. eapply D'. { exact H0. }
+          invert H2; [left | right]. { assumption. } apply SetoidList.InA_rev. rewrite R. right. apply SetoidList.InA_rev. assumption. }
+        constructor. 2: { apply SetoidList.NoDupA_rev. { exact Map.eq_key_equiv. }
+          eapply no_dup_tail. rewrite <- R. apply SetoidList.NoDupA_rev. { exact Map.eq_key_equiv. } assumption. }
+        intro I. eapply SetoidList.InA_rev in I. rewrite List.rev_involutive in I. eapply SetoidList.InA_cons_tl in I.
+        rewrite <- R in I. apply -> SetoidList.InA_rev in I. apply H5 in I as [].
+      * intros [C | C]; apply H1. { left. exact C. } right. apply SetoidList.InA_app_iff.
+        apply SetoidList.InA_app_iff in C as [C | C]; [left | right]. { exact C. } invert C; [left | right]. { assumption. }
+        apply SetoidList.InA_rev. rewrite R. right. apply SetoidList.InA_rev. assumption.
+    + (* apply no_dup_app in H4 as [NDl [NDr D]]. 2: { exact Map.eq_key_equiv. } *)
+      clear dec pair_dec H1 H2 H3 H4. generalize dependent r2. generalize dependent r1. generalize dependent l1.
+      induction l2; intros; cbn in *. { destruct l1; invert E. { contradiction N. reflexivity. } contradiction H. left. reflexivity. }
+      destruct l1; invert E; cbn in *. { contradiction H0. apply List.in_or_app. right. left. reflexivity. }
+      assert (N1 : ~List.In (x2, y2) l1). { intro I. apply H. right. exact I. }
+      specialize (IHl2 _ N1 _ H0 _ H3) as [l3 [r3 [-> ->]]]. do 2 eexists. split; reflexivity.
+Qed.
+
+Lemma app_cons_nil {T} (x : T) a b
+  : ((a ++ x :: nil) ++ b)%list = (a ++ x :: b)%list.
+Proof. generalize dependent b. induction a; intros; cbn in *. { reflexivity. } rewrite IHa. reflexivity. Qed.
+
+Lemma app_eq_l {T} {a b x : list T} (E : (a ++ x)%list = (b ++ x)%list)
+  : a = b.
+Proof.
+  generalize dependent b. generalize dependent a. induction x; intros; cbn in *. { repeat rewrite List.app_nil_r in E. exact E. }
+  rewrite <- (app_cons_nil _ a0) in E. rewrite <- (app_cons_nil _ b) in E. specialize (IHx _ _ E). apply rev_eq in IHx.
+  repeat rewrite List.rev_app_distr in IHx. cbn in IHx. invert IHx. apply rev_eq in H0. exact H0.
+Qed.
+
+Lemma count_strict_ref {context scrutinee pattern cleaved context_with_matches}
+  (M : StrictRef context pattern scrutinee cleaved context_with_matches)
+  : Pattern.strict_nodes_left pattern +
+    List.fold_right (fun kv => Nat.add $ Term.nodes $ snd kv) 0 (MapCore.bindings context_with_matches) =
+    Term.nodes scrutinee +
+    List.fold_right (fun kv => Nat.add $ Term.nodes $ snd kv) 0 (MapCore.bindings context).
+Proof.
+  induction M; intros. { cbn. apply Map.bindings_eq in E as ->. reflexivity. }
+  eassert (agree : _); [| assert (A' := @Map.add_overriding _ argument_name argument context_with_function_matches agree)]. {
+    cbn. intros. contradiction N. eexists. exact F. } assert (E := Map.add_det A eq_refl eq_refl (Map.eq_refl _) A').
+  apply Map.bindings_eq in E as ->; clear agree A'. destruct (Map.bindings_add_split N argument) as [bl [br [-> E]]].
+  rewrite List.fold_right_app. cbn. rewrite pull_out_of_acc. rewrite <- List.fold_right_app. rewrite <- E; clear bl br E.
+  f_equal. repeat rewrite PeanoNat.Nat.add_assoc. repeat rewrite (PeanoNat.Nat.add_comm _ $ Term.nodes argument).
+  repeat rewrite <- (PeanoNat.Nat.add_assoc $ Term.nodes argument). f_equal. exact IHM.
+Qed.
+
+Lemma count_cleaved {context scrutinee pattern cleaved context_with_matches}
+  (M : StrictRef context pattern scrutinee cleaved context_with_matches)
+  : Term.nodes cleaved = Pattern.strict_nodes pattern.
+Proof. induction M; cbn in *. { reflexivity. } f_equal. rewrite IHM. apply PeanoNat.Nat.add_1_r. Qed.
+
+Lemma not_in_forallb {T} {li x} {y : T} (N : ~SetoidList.InA MapCore.eq_key (x, y) li)
+  : List.forallb (fun kv => negb $ String.eqb x $ fst kv) li = true.
+Proof.
+  generalize dependent y. generalize dependent x. induction li as [| [k v] tail IH]; intros; cbn in *. { reflexivity. }
+  destruct (String.eqb_spec x k); cbn in *. { subst. contradiction N. left. reflexivity. }
+  eapply IH. intro I. apply N. right. exact I.
+Qed.
+
+Lemma count_strict_ref_remove {context name looked_up} (lookup : Map.Find context name looked_up)
+  {scrutinee pattern cleaved context_with_matches} (M : StrictRef context pattern scrutinee cleaved context_with_matches)
+  : Term.nodes looked_up +
+    List.fold_right (fun kv : MapCore.key * Term.term => Nat.add $ Term.nodes $ snd kv) 0
+    (MapCore.bindings $ Map.remove name context_with_matches) =
+    List.fold_right (fun kv : MapCore.key * Term.term => Nat.add $ Term.nodes $ snd kv) 0
+    (MapCore.bindings context_with_matches).
+Proof.
+  assert (F := in_strict_ref_context lookup M). apply MapCore.bindings_spec1 in F.
+  apply SetoidList.InA_split in F as [bl [[k v] [br [[] E]]]]; cbn in *; subst k; subst v. rewrite E.
+  assert (Er : MapCore.bindings $ Map.remove name context_with_matches = (bl ++ br)%list). {
+    rewrite Map.bindings_remove. rewrite E. rewrite List.filter_app. cbn. rewrite String.eqb_refl; cbn.
+    rewrite <- List.filter_app. apply List.forallb_filter_id. assert (ND := MapCore.bindings_spec2w context_with_matches).
+    rewrite E in ND. apply SetoidList.NoDupA_swap in ND. 2: { exact Map.eq_key_equiv. }
+    invert ND. eapply not_in_forallb. eassumption. } rewrite Er.
+  rewrite (List.fold_right_app _ _ $ cons _ _). cbn. rewrite pull_out_of_acc. rewrite <- List.fold_right_app. reflexivity.
+Qed.
+
+Lemma count_strict_ref_overwrite {context name looked_up} (lookup : Map.Find context name looked_up)
+  {scrutinee pattern cleaved context_with_matches} (M : StrictRef context pattern scrutinee cleaved context_with_matches)
+  : Term.nodes looked_up +
+    List.fold_right (fun kv => Nat.add $ Term.nodes $ snd kv) 0
+    (MapCore.bindings $ Map.overwrite name cleaved context_with_matches) =
+    Pattern.strict_nodes pattern +
+    List.fold_right (fun kv => Nat.add $ Term.nodes $ snd kv) 0
+    (MapCore.bindings context_with_matches).
+Proof.
+  assert (F := in_strict_ref_context lookup M). destruct (Map.bindings_overwrite_split F cleaved) as [bl [br [-> E]]].
+  rewrite List.fold_right_app. cbn. rewrite pull_out_of_acc. rewrite <- List.fold_right_app. erewrite (count_cleaved M).
+  assert (E' : (bl ++ br)%list = MapCore.bindings $ Map.remove name context_with_matches). {
+    rewrite Map.bindings_remove. rewrite E. rewrite List.filter_app. cbn. rewrite String.eqb_refl; cbn.
+    rewrite <- List.filter_app. symmetry. apply List.forallb_filter_id. assert (ND := MapCore.bindings_spec2w context_with_matches).
+    rewrite E in ND. apply SetoidList.NoDupA_swap in ND. 2: { exact Map.eq_key_equiv. }
+    invert ND. eapply not_in_forallb. eassumption. } rewrite E'; clear F bl br E E'.
+  rewrite PeanoNat.Nat.add_assoc. rewrite (PeanoNat.Nat.add_comm _ $ Pattern.strict_nodes _).
+  rewrite <- PeanoNat.Nat.add_assoc. erewrite count_strict_ref_remove. 2: { exact lookup. } 2: { exact M. } reflexivity.
+Qed.
+
+Lemma count_strict_ref_cleaved {context name looked_up} (lookup : Map.Find context name looked_up)
+  {scrutinee pattern cleaved context_with_matches} (M : StrictRef context pattern scrutinee cleaved context_with_matches)
+  : S $ Term.nodes looked_up +
+    List.fold_right (fun kv => Nat.add $ Term.nodes $ snd kv) 0
+    (MapCore.bindings $ Map.overwrite name cleaved context_with_matches) =
+    Pattern.strict_nodes_left pattern + Term.nodes scrutinee +
+    List.fold_right (fun kv => Nat.add $ Term.nodes $ snd kv) 0
+    (MapCore.bindings context).
+Proof.
+  erewrite count_strict_ref_overwrite. 2: { exact lookup. } 2: { exact M. } clear name looked_up lookup.
+  induction M; intros; cbn in *. { apply Map.bindings_eq in E as ->. reflexivity. }
+  f_equal. rewrite <- (PeanoNat.Nat.add_comm $ Term.nodes _). rewrite PeanoNat.Nat.add_succ_r.
+  rewrite (PeanoNat.Nat.add_comm $ Term.nodes _). rewrite PeanoNat.Nat.add_assoc.
+  rewrite (PeanoNat.Nat.add_comm _ $ Term.nodes argument). repeat rewrite PeanoNat.Nat.add_succ_l.
+  rewrite <- PeanoNat.Nat.add_assoc. rewrite <- IHM; clear IHM. rewrite PeanoNat.Nat.add_succ_r.
+  rewrite PeanoNat.Nat.add_assoc. rewrite (PeanoNat.Nat.add_comm _ $ Pattern.strict_nodes _).
+  repeat rewrite <- PeanoNat.Nat.add_assoc. repeat f_equal.
+  destruct (Map.bindings_add_split N argument) as [bl [br [Ea Ec]]]. rewrite Ec.
+  eassert (agree : _); [| assert (A' := @Map.add_overriding _ argument_name argument context_with_function_matches agree)]. {
+    intros v' F'. contradiction N. eexists. exact F'. } assert (D := Map.add_det A eq_refl eq_refl (Map.eq_refl _) A').
+  apply Map.bindings_eq in D as ->; clear context_with_matches A agree A'. rewrite Ea.
+  rewrite List.fold_right_app. cbn. rewrite pull_out_of_acc. rewrite <- List.fold_right_app. reflexivity.
+Qed.
+*)
+
+Lemma lt_arbitrary_node a b
+  : (a < S b) <-> forall t, a < b + Term.nodes t.
+Proof.
+  split.
+  - intros L t. destruct t; cbn; try solve [rewrite PeanoNat.Nat.add_1_r; exact L];
+    rewrite PeanoNat.Nat.add_succ_r; rewrite <- PeanoNat.Nat.add_succ_l; apply PeanoNat.Nat.lt_lt_add_r; exact L.
+  - intro L. specialize (L $ Term.Ctr $ Constructor.Builtin Constructor.Error).
+    cbn in L. rewrite PeanoNat.Nat.add_1_r in L. exact L.
+Qed.
+
+Lemma count_overwrite {original k old} (F : Map.Find original k old)
+  {new overwritten} (OW : Map.OverwriteIfPresent k new original overwritten)
+  : Term.nodes old + List.fold_right (fun kv => Nat.add $ Term.nodes $ snd kv) 0 (MapCore.bindings overwritten) =
+    Term.nodes new + List.fold_right (fun kv => Nat.add $ Term.nodes $ snd kv) 0 (MapCore.bindings original).
+Proof.
+  destruct (Map.bindings_overwrite_split F new) as [bl [br [E' E]]]. rewrite E.
+  assert (A := Map.overwrite_if_present_det OW eq_refl eq_refl (Map.eq_refl _) (Map.overwrite_if_present_overwrite _ _ _)).
+  apply Map.bindings_eq in A as ->. rewrite E'. repeat rewrite List.fold_right_app. cbn. repeat rewrite pull_out_of_acc.
+  repeat rewrite PeanoNat.Nat.add_assoc. f_equal. apply PeanoNat.Nat.add_comm.
+Qed.
+
+Lemma strict_ref_decreasing {context pattern scrutinee cleaved context_with_matches}
+  (matched : StrictRef context pattern scrutinee cleaved context_with_matches)
+  : Term.nodes cleaved +
+    List.fold_right (fun kv : MapCore.key * Term.term => Nat.add $ Term.nodes $ snd kv) 0 (MapCore.bindings context_with_matches) <
+    S $ S $ Term.nodes scrutinee + Pattern.strict_nodes pattern +
+    List.fold_right (fun kv : MapCore.key * Term.term => Nat.add $ Term.nodes $ snd kv) 0 (MapCore.bindings context).
+Proof.
+  induction matched; cbn in *. { apply Map.bindings_eq in E as ->.
+    repeat (try apply PeanoNat.Nat.lt_succ_diag_r; eapply PeanoNat.Nat.lt_trans). }
+  rewrite PeanoNat.Nat.add_1_r. cbn. repeat apply -> PeanoNat.Nat.succ_lt_mono. repeat rewrite PeanoNat.Nat.add_succ_r. cbn.
+  destruct (Map.bindings_add_split N argument) as [bl [br [Ea Ec]]].
+  eassert (agree : _); [| assert (A' := Map.add_det A eq_refl eq_refl (Map.eq_refl _) $ Map.add_overriding agree)]. {
+    intros v' F'. edestruct N. eexists. exact F'. } apply Map.bindings_eq in A' as ->; clear agree. rewrite Ea; clear Ea.
+  rewrite List.fold_right_app. cbn. rewrite pull_out_of_acc. rewrite <- List.fold_right_app. rewrite <- Ec; clear bl br Ec.
+  rewrite PeanoNat.Nat.add_assoc. repeat rewrite (PeanoNat.Nat.add_comm _ $ Term.nodes argument).
+  repeat rewrite <- (PeanoNat.Nat.add_assoc $ Term.nodes argument).
+  repeat rewrite <- (PeanoNat.Nat.add_succ_r $ Term.nodes argument). apply PeanoNat.Nat.add_lt_mono_l.
+  eapply PeanoNat.Nat.lt_trans. { exact IHmatched. } apply PeanoNat.Nat.lt_succ_diag_r.
+Qed.
+
+Lemma move_or_reference_decreasing_simpl {context symlink name scrutinee}
+  (follow_references : Context.FollowReferences context symlink name scrutinee)
+  {pattern cleaved old_context_with_matches} (matched : StrictRef context pattern scrutinee cleaved old_context_with_matches)
+  {context_with_matches} (OW : Map.Overwrite name cleaved old_context_with_matches context_with_matches)
+  : List.fold_right
+      (fun kv : MapCore.key * Term.term => Nat.add (Term.nodes (snd kv))) 0
+      (MapCore.bindings context_with_matches) <
+    S $ S $ Pattern.strict_nodes pattern +
+    List.fold_right
+      (fun kv : MapCore.key * Term.term => Nat.add (Term.nodes (snd kv))) 0
+      (MapCore.bindings context).
+Proof.
+  assert (F := Context.follow_references_find follow_references). destruct OW as [[tmp F'] OW].
+  assert (F'' := in_strict_ref_context F matched). destruct (Map.find_det F'' F'). clear F''.
+  eapply PeanoNat.Nat.add_lt_mono_l. rewrite (count_overwrite F' OW). clear context_with_matches F' OW F.
+  repeat rewrite PeanoNat.Nat.add_succ_r. rewrite PeanoNat.Nat.add_assoc. eapply strict_ref_decreasing; eassumption.
+Qed.
+
+Lemma move_or_reference_decreasing {context pattern scrutinee context_with_matches}
+  (move_or_reference_matched : MoveOrReference context pattern scrutinee context_with_matches) other_cases
+  : List.fold_right (fun kv => Nat.add $ Term.nodes $ snd kv) 0 (MapCore.bindings context_with_matches) <
+    Pattern.move_or_reference_nodes pattern + Term.nodes other_cases + Term.nodes scrutinee +
+    List.fold_right (fun kv => Nat.add $ Term.nodes $ snd kv) 0 (MapCore.bindings context).
+Proof.
+  invert move_or_reference_matched. { apply strict_decreasing. exact S. }
+  cbn. rewrite (PeanoNat.Nat.add_comm _ $ Term.nodes other_cases). repeat rewrite <- PeanoNat.Nat.add_assoc.
+  cbn. rewrite (PeanoNat.Nat.add_comm $ Term.nodes other_cases). generalize dependent other_cases. apply lt_arbitrary_node.
+  rewrite PeanoNat.Nat.add_succ_r. rename S into M. eapply move_or_reference_decreasing_simpl; eassumption.
+Qed.
+
+Lemma decreasing {context pattern scrutinee context_with_matches}
+  (M : Pattern context pattern scrutinee context_with_matches) other_cases
+  : List.fold_right (fun kv => Nat.add $ Term.nodes $ snd kv) 0 (MapCore.bindings context_with_matches) <
+    Pattern.nodes pattern + Term.nodes other_cases + Term.nodes scrutinee +
+    List.fold_right (fun kv => Nat.add $ Term.nodes $ snd kv) 0 (MapCore.bindings context).
+Proof.
+  invert M; cbn in *. 2: { apply move_or_reference_decreasing. exact move_or_reference_matched. }
+  rename S into A. eassert (agree : _); [| assert (A' := @Map.add_overriding _ name scrutinee context agree)]. {
+    intros v' F'. contradiction N. eexists. exact F'. }
+  eapply Map.add_det in A'; try reflexivity. 2: { exact A. } 2: { apply Map.eq_refl. }
+  apply Map.bindings_eq in A' as ->. destruct (Map.bindings_add_split N scrutinee) as [bl [br [-> ->]]].
+  repeat rewrite List.fold_right_app. cbn. rewrite pull_out_of_acc.
+  rewrite (PeanoNat.Nat.add_comm _ $ Term.nodes scrutinee). rewrite <- PeanoNat.Nat.add_assoc. rewrite plus_n_Sm.
+  apply PeanoNat.Nat.add_lt_mono_l. repeat rewrite <- PeanoNat.Nat.add_succ_l.
+  apply PeanoNat.Nat.lt_add_pos_l. apply PeanoNat.Nat.lt_0_succ.
 Qed.

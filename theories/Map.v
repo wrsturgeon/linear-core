@@ -427,20 +427,20 @@ Lemma overwrite_if_present_overwrite {T} k m (v : T)
 Proof. cbn. intros. apply find_overriding_add. Qed.
 
 Lemma overwrite_if_present_det {T}
-  k1 (v1 : T) m1 m1' (O1 : OverwriteIfPresent k1 v1 m1 m1')
-  k2 (Ek : k1 = k2)
-  v2 (Ev : v1 = v2)
-  m2 (Em : Eq m1 m2)
-  m2' (O2 : OverwriteIfPresent k2 v2 m2 m2')
+  {k1} {v1 : T} {m1 m1'} (O1 : OverwriteIfPresent k1 v1 m1 m1')
+  {k2} (Ek : k1 = k2)
+  {v2} (Ev : v1 = v2)
+  {m2} (Em : Eq m1 m2)
+  {m2'} (O2 : OverwriteIfPresent k2 v2 m2 m2')
   : Eq m1' m2'.
 Proof. cbn in *. intros x y. subst. rewrite O1. rewrite O2. cbn in Em. rewrite Em. reflexivity. Qed.
 
 Lemma overwrite_if_present_eq {T}
-  k1 (v1 : T) m1 m1' (O1 : OverwriteIfPresent k1 v1 m1 m1')
-  k2 (Ek : k1 = k2)
-  v2 (Ev : v1 = v2)
-  m2 (Em : Eq m1 m2)
-  m2' (Em' : Eq m1' m2')
+  {k1} (v1 : T) {m1 m1'} (O1 : OverwriteIfPresent k1 v1 m1 m1')
+  {k2} (Ek : k1 = k2)
+  {v2} (Ev : v1 = v2)
+  {m2} (Em : Eq m1 m2)
+  {m2'} (Em' : Eq m1' m2')
   : OverwriteIfPresent k2 v1 m2 m2'.
 Proof. cbn in *. subst. intros. cbn in Em'. rewrite <- Em'. rewrite O1. cbn in Em. rewrite Em. reflexivity. Qed.
 
@@ -460,7 +460,7 @@ Definition Overwrite {T} k v (m m' : to T) : Prop :=
   OverwriteIfPresent k v m m'.
 Arguments Overwrite {T} k v m m'/.
 
-Lemma overwrite_overwrite {T} k m (I : In m k) (v : T)
+Lemma overwrite_overwrite {T k m} (I : In m k) (v : T)
   : Overwrite k v m (overwrite k v m).
 Proof. split. { exact I. } apply overwrite_if_present_overwrite. Qed.
 

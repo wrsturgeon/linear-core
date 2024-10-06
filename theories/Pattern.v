@@ -2,6 +2,7 @@ From LinearCore Require
   Constructor
   .
 From LinearCore Require Import
+  DollarSign
   Invert
   .
 
@@ -79,6 +80,31 @@ Proof.
   - unfold eq. destruct (move_or_reference_eq_spec move_or_reference0 move_or_reference1); constructor. { subst. reflexivity. }
     intro E. apply N. invert E. reflexivity.
 Qed.
+
+
+
+Fixpoint strict_nodes_left p :=
+  match p with
+  | Ctr _ => 1
+  | App p _ => S $ strict_nodes_left p
+  end.
+
+Fixpoint strict_nodes p :=
+  match p with
+  | Ctr _ => 1
+  | App p _ => S $ S $ strict_nodes p
+  end.
+
+Definition move_or_reference_nodes p :=
+  match p with
+  | Mov p | Ref p => strict_nodes p
+  end.
+
+Definition nodes p :=
+  match p with
+  | Nam _ => 1
+  | Pat p => move_or_reference_nodes p
+  end.
 
 
 

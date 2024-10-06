@@ -318,3 +318,30 @@ Proof.
     * intros [x [B F]]. invert B. constructor. eapply bound_in_move_or_reference. { eassumption. }
       eexists. split; eassumption.
 Qed.
+
+
+
+Lemma strict_nodes_left_eq {lookup p r} (E : strict lookup p = Some r)
+  : Pattern.strict_nodes_left r = Pattern.strict_nodes_left p.
+Proof.
+  generalize dependent r. generalize dependent lookup. induction p; intros; cbn in *. { invert E. reflexivity. }
+  destruct Map.find; cbn in *. 2: { discriminate E. } destruct strict eqn:E'; invert E. cbn. f_equal. eapply IHp. exact E'.
+Qed.
+
+Lemma strict_nodes_eq {lookup p r} (E : strict lookup p = Some r)
+  : Pattern.strict_nodes r = Pattern.strict_nodes p.
+Proof.
+  generalize dependent r. generalize dependent lookup. induction p; intros; cbn in *. { invert E. reflexivity. }
+  destruct Map.find; cbn in *. 2: { discriminate E. } destruct strict eqn:E'; invert E. cbn. do 2 f_equal. eapply IHp. exact E'.
+Qed.
+
+Lemma move_or_reference_nodes_eq {lookup p r} (E : move_or_reference lookup p = Some r)
+  : Pattern.move_or_reference_nodes r = Pattern.move_or_reference_nodes p.
+Proof. destruct p; cbn in *; destruct strict eqn:E'; invert E; eapply strict_nodes_eq; exact E'. Qed.
+
+Lemma pattern_nodes_eq {lookup p r} (E : pattern lookup p = Some r)
+  : Pattern.nodes r = Pattern.nodes p.
+Proof.
+  destruct p; cbn in *. { destruct Map.find; invert E. reflexivity. }
+  destruct move_or_reference eqn:E'; invert E. cbn. eapply move_or_reference_nodes_eq. exact E'.
+Qed.

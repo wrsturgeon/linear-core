@@ -49,14 +49,27 @@ Proof.
     subst. destruct (IHa2 b2); constructor. { f_equal. assumption. } intro E. apply N. invert E. reflexivity.
 Qed.
 
+Lemma eq_iff a b
+  : (a = b) <-> eq a b = true.
+Proof. exact (Reflect.bool_iff $ eq_spec _ _). Qed.
+
+Lemma eq_dec (a b : term)
+  : sumbool (a = b) (a <> b).
+Proof.
+  destruct (eq a b) eqn:E; [left | right]. { apply eq_iff in E. exact E. }
+  intro E'. apply eq_iff in E'. rewrite E in E'. discriminate E'.
+Qed.
+
 
 
 Fixpoint nodes t :=
   match t with
-  | Term.App a b
-  | Term.For _ a b
-  | Term.Cas _ a b =>
-      S $ nodes a + nodes b
+  | Term.App function argument =>
+      S $ nodes function + nodes argument
+  | Term.For _ type body =>
+      S $ S $ nodes type + nodes body
+  | Term.Cas pattern body_if_match other_cases =>
+      S $ Pattern.nodes pattern + nodes body_if_match + nodes other_cases
   | _ => 1
   end.
 
