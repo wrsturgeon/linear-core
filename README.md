@@ -2,7 +2,7 @@
 
 **In a word:** Purely functional programs that compile and run like low-level code.
 
-**In a few more words:** **Strongly normalizing** **purely functional** semantics with **dependent types**, **linear resources**, and **lazy evaluation**.
+**In a few more words:** Strongly normalizing purely functional semantics with dependent types, linear resources, and lazy evaluation.
 
 At a glance, here's the abstract syntax tree, defined similarly to Backus-Naur form:
 
