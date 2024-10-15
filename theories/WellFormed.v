@@ -32,7 +32,7 @@ Proof.
   generalize dependent bindings. induction strict_pattern; cbn in *; intros. {
     invert E. split. { intros [y F]. invert F. } intro B. invert B. }
   destruct (strict_acc strict_pattern) as [bindings' |] eqn:Es. 2: { discriminate E. }
-  destruct (Map.find_spec bindings' argument); invert E. specialize (IHstrict_pattern _ eq_refl x). split.
+  unfold Map.in_ in E. destruct (Map.find_spec bindings' argument); invert E. specialize (IHstrict_pattern _ eq_refl x). split.
   - intros [v F]. apply Map.find_overriding_add in F as [[-> ->] | [Nx M]]; [left | right].
     apply IHstrict_pattern. eexists. exact M.
   - intro B. apply Map.in_overriding_add. invert B; [left | right]. { reflexivity. }
@@ -45,7 +45,7 @@ Proof.
   induction strict_pattern; cbn in *. { constructor. constructor. }
   assert (R := strict_acc_bound_in strict_pattern). destruct IHstrict_pattern as [bindings |]. 2: {
     constructor. intros bindings S. invert S. apply N in curried_well_formed as []. exact bindings. }
-  specialize (R _ eq_refl). destruct (Map.find_spec bindings argument); constructor.
+  specialize (R _ eq_refl). unfold Map.in_. destruct (Map.find_spec bindings argument); constructor.
   - intros bindings' S. invert S. apply N. apply R. eexists. eassumption.
   - constructor. { exact Y. } intro B. apply R in B as [y F]. apply N in F as [].
 Qed.

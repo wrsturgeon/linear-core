@@ -46,7 +46,7 @@ Fixpoint term t : Map.set :=
   | _ => Map.empty
   end.
 
-Lemma term_spec t
+Lemma term_iff t
   : Map.Reflect (Term t) (term t).
 Proof.
   induction t; cbn in *; intros.
@@ -54,26 +54,25 @@ Proof.
   - split. { intros [v F]. apply Map.find_singleton in F as [-> ->]. constructor. }
     intro T. invert T. eexists. apply Map.find_singleton. split; reflexivity.
   - split.
-    + intros [v F]. eapply Map.union_overriding in F as [F | F];
-      [apply ApF; apply IHt1 | apply ApA; apply IHt2 |]; try (eexists; exact F).
-      intros ? [] ? []. reflexivity.
+    + intros [v F]. eapply Map.union_set in F as [F | F];
+      [apply ApF; apply IHt1 | apply ApA; apply IHt2]; eexists; exact F.
     + intro T. invert T; [apply IHt1 in used_in_function as [v IH] | apply IHt2 in used_in_argument as [v IH]];
-      eexists; (apply Map.union_overriding; [intros ? [] ? []; reflexivity |]); [left | right]; exact IH.
+      eexists; apply Map.union_set; [left | right]; exact IH.
   - split.
-    + intros [v F]. apply Map.union_overriding in F as [F | F]; [| | intros ? [] ? []; reflexivity]. {
+    + intros [v F]. apply Map.union_set in F as [F | F]. {
         apply FoT. apply IHt1. eexists. exact F. }
       eapply Map.find_remove_if_present in F as [N F]. 2: { apply Map.remove_if_present_remove. }
       apply FoB. { exact N. } apply IHt2. eexists. exact F.
     + intro T. invert T; [apply IHt1 in used_in_type as [v IH] | apply IHt2 in used_in_body as [v IH]];
-      eexists; (apply Map.union_overriding; [intros ? [] ? []; reflexivity |]); [left | right]. { exact IH. }
+      eexists; apply Map.union_set; [left | right]. { exact IH. }
       eapply Map.find_remove_if_present. { apply Map.remove_if_present_remove. } split; eassumption.
   - split.
-    + intros [v F]. apply Map.union_overriding in F as [F | F]; [| | intros ? [] ? []; reflexivity]. {
+    + intros [v F]. apply Map.union_set in F as [F | F]. {
         apply CaO. apply IHt2. eexists. exact F. }
       apply Map.minus_minus in F as [F N]. apply CaB. 2: { eapply IHt1. eexists. exact F. }
       intro B. apply N. apply BoundIn.pattern_iff. exact B.
     + intro T. invert T; [apply IHt1 in used_in_body as [v IH] | apply IHt2 in used_in_another_case as [v IH]];
-      eexists; (apply Map.union_overriding; [intros ? [] ? []; reflexivity |]); [right | left]. 2: { exact IH. }
+      eexists; apply Map.union_set; [right | left]. 2: { exact IH. }
       apply Map.minus_minus. split. { exact IH. } intro B. apply not_shadowed. apply BoundIn.pattern_iff. exact B.
 Qed.
 
@@ -165,7 +164,7 @@ Next Obligation.
   rewrite <- PeanoNat.Nat.add_succ_l. apply PeanoNat.Nat.lt_add_pos_l. apply PeanoNat.Nat.lt_0_succ. Qed.
 Fail Next Obligation.
 
-Lemma indirect_spec context t
+Lemma indirect_iff context t
   : Map.Reflect (Indirect context t) (indirect context t).
 Proof.
   funelim (indirect context t).

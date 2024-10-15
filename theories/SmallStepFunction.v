@@ -32,7 +32,7 @@ Fixpoint bar_along_left_side s :=
   end.
 
 Definition to_string (opt : option (Context.context * Term.term)) : string := (
-  match opt with None => "<abort>" | Some (context, term) =>
+  match opt with None => "<normal form>" | Some (context, term) =>
     let '(line_length, format_term, _) := Term.to_string_configurable_acc Term.default_line_length 0 term in
     let term_formatted := format_term Term.default_newline_str Term.default_indent_str in
     let dividing_line := Term.repeat Term.default_line_length "-" in
@@ -70,24 +70,25 @@ Equations step (context : Context.context) (term : Term.term)
     | None =>
         match function with
         | Term.Cas pattern body_if_match other_cases => (* TODO: simplify `Unshadow.unshadowed` below *)
-            if andb (Match.compatible context pattern) (Unshadow.unshadowed $ Term.App function argument) then
-              match pattern with
-              | Pattern.Nam name => Some (Map.overriding_add name argument context, body_if_match)
-              | Pattern.Pat move_or_reference =>
-                  match Shape.shape_or_ref context argument with
-                  | Some _ =>
-                      match Match.move_or_reference context move_or_reference argument with
-                      | None => Some (context, Term.App other_cases argument)
-                      | Some context_with_matches => Some (context_with_matches, body_if_match)
-                      end
-                  | None =>
-                      match step context argument with None => None | Some (updated_context, reduced_scrutinee) =>
-                        Some (updated_context, Term.App (Term.Cas pattern body_if_match other_cases) reduced_scrutinee)
-                      end
-                  end
-              end
-            else (* TODO: simplify `Unshadow.unshadowed` below *)
-              option_map (pair context) $ Unshadow.unshadow_reserve (Map.domain context) $ Term.App function argument
+            if Map.domain_subset (UsedIn.term $ Term.App (Term.Cas pattern body_if_match other_cases) argument) context then
+              if andb (Match.compatible context pattern) (Unshadow.well_formed_in (Map.domain context) $ Term.App function argument) then
+                match pattern with
+                | Pattern.Nam name => Some (Map.overriding_add name argument context, body_if_match)
+                | Pattern.Pat move_or_reference =>
+                    match Shape.shape_or_ref context argument with
+                    | Some _ =>
+                        match Match.move_or_reference context move_or_reference argument with
+                        | None => Some (context, Term.App other_cases argument)
+                        | Some context_with_matches => Some (context_with_matches, body_if_match)
+                        end
+                    | None =>
+                        match step context argument with None => None | Some (updated_context, reduced_scrutinee) =>
+                          Some (updated_context, Term.App (Term.Cas pattern body_if_match other_cases) reduced_scrutinee)
+                        end
+                    end
+                end (* TODO: simplify `Unshadow.unshadowed` below *)
+              else option_map (pair context) $ Unshadow.unshadow_reserve (Map.domain context) $ Term.App function argument
+            else None
         | _ => None
         end
     end;
@@ -109,6 +110,11 @@ Fail Next Obligation.
 
 
 
+Lemma unit_eq_spec : forall a b : unit, Reflect.Bool (a = b) true. Proof. intros [] []. constructor. reflexivity. Qed.
+
+
+
+(*
 Theorem spec context term
   : Reflect.Option (fun pair => SmallStep.Step context term (fst pair) (snd pair)) (step context term).
 Proof.
@@ -118,38 +124,65 @@ Proof.
     + intros [updated_context updated_term] S; cbn in *. invert S. apply N in lookup as [].
   - clear Heqcall. destruct H as [[updated_context updated_function] |]. { constructor. cbn in *. constructor. exact Y. }
     destruct function; try solve [constructor; intros [c t] S; invert S; cbn in *; apply (N (_, _)) in reduce_function as []].
-    destruct andb eqn:E. 2: {
-      apply Bool.andb_false_iff in E. destruct Unshadow.unshadow_reserve eqn:Eu; constructor.
-      * cbn. eapply SmallStep.ApR. 3: { exact Eu. } 2: { apply Map.domain_domain. } 2: { apply Map.eq_refl. }
+    destruct (Map.subset_spec unit_eq_spec (UsedIn.term $ Term.App (Term.Cas pattern function1 function2) argument) $
+      Map.domain context). 2: { admit. }
+    destruct andb eqn:E.
+    + apply Bool.andb_true_iff in E as [MC US]. apply Match.compatible_iff in MC.
+      destruct (@Unshadow.well_formed_in_spec (Term.App (Term.Cas pattern function1 function2) argument) $ Map.domain context). {
+        intros. apply Map.in_domain. generalize dependent x. eapply Unshadow.neg.
+
+
+
+      apply Unshadow.well_formed_in_iff in US.
+      destruct pattern. { constructor. cbn. apply SmallStep.ApM; try assumption. invert MC.
+        constructor. { assumption. } apply Map.add_overriding. intros v F. contradiction N0. eexists. exact F. }
+      destruct (Shape.shape_or_ref_spec context argument).
+      * destruct (Match.move_or_reference_spec context move_or_reference argument); constructor; cbn.
+        -- apply SmallStep.ApM. { exact MC. } { exact US. } constructor. exact Y0.
+        -- eapply SmallStep.ApN. { exact MC. } { exact US. } 2: { exact Y. } 2: { apply Map.eq_refl. }
+           intros ? P. invert P. apply N0 in move_or_reference_matched as [].
+      * destruct H0 as [[updated_context reduced_scrutinee] |]; constructor; try solve [repeat constructor].
+        -- cbn in *. apply SmallStep.ApS. { exact MC. } { exact US. } 2: { exact Y. } intros ? P. invert P.
+           apply Match.move_or_reference_shape_or_ref in move_or_reference_matched as SR. apply N0 in SR as [].
+        -- intros [c t] C. cbn in *. invert C.
+          ++ apply (N (_, _)) in reduce_function as [].
+          ++ invert matched. apply Match.move_or_reference_shape_or_ref in move_or_reference_matched.
+             apply N0 in move_or_reference_matched as [].
+          ++ apply (N1 (_, _)) in reduce_scrutinee as [].
+          ++ apply N0 in scrutinee_reduced as [].
+          ++ destruct not_yet_safe_to_match as [NS | NS]; apply NS. { exact MC. } exact US.
+    + apply Bool.andb_false_iff in E. destruct Unshadow.unshadow_reserve eqn:Eu; constructor.
+      * cbn. eapply SmallStep.ApR. { apply Map.domain_domain. } 3: { exact Eu. } 2: { apply Map.domain_domain. } 2: { apply Map.eq_refl. }
         destruct E as [E | E]; [left | right]; intro C.
         -- apply Match.compatible_iff in C. rewrite E in C. discriminate C.
-        -- apply Unshadow.unshadowed_iff in C. rewrite E in C. discriminate C.
-      * intros [c' t'] C. simpl fst in *. simpl snd in *. invert C; try solve [destruct E as [E | E]; [
-          apply Match.compatible_iff in compatible_names; rewrite E in compatible_names; discriminate compatible_names |
-          apply Unshadow.unshadowed_iff in unshadowed; rewrite E in unshadowed; discriminate unshadowed]]. {
-          apply (N (_, _)) in reduce_function as []. }
-        assert (Ed : Map.Eq (Map.domain context) context_domain). {
-          eapply Map.domain_det. { apply Map.domain_domain. } 2: { exact D. } apply Map.eq_refl. }
-        destruct (Unshadow.det_reserve Ed (@eq_refl _ $ Term.App (Term.Cas pattern function1 function2) argument)).
-        rewrite Eu in rename. discriminate rename. }
-    apply Bool.andb_true_iff in E as [MC US]. apply Match.compatible_iff in MC. apply Unshadow.unshadowed_iff in US.
-    destruct pattern. { constructor. cbn. apply SmallStep.ApM; try assumption. invert MC.
-      constructor. { assumption. } apply Map.add_overriding. intros v F. contradiction N0. eexists. exact F. }
-    destruct (Shape.shape_or_ref_spec context argument).
-    + destruct (Match.move_or_reference_spec context move_or_reference argument); constructor; cbn.
-      * apply SmallStep.ApM. { exact MC. } { exact US. } constructor. exact Y0.
-      * eapply SmallStep.ApN. { exact MC. } { exact US. } 2: { exact Y. } 2: { apply Map.eq_refl. }
-        intros ? P. invert P. apply N0 in move_or_reference_matched as [].
-    + destruct H0 as [[updated_context reduced_scrutinee] |]; constructor; try solve [repeat constructor].
-      * cbn in *. apply SmallStep.ApS. { exact MC. } { exact US. } 2: { exact Y. } intros ? P. invert P.
-        apply Match.move_or_reference_shape_or_ref in move_or_reference_matched as SR. apply N0 in SR as [].
-      * intros [c t] C. cbn in *. invert C.
-        -- apply (N (_, _)) in reduce_function as [].
-        -- invert matched. apply Match.move_or_reference_shape_or_ref in move_or_reference_matched.
-           apply N0 in move_or_reference_matched as [].
-        -- apply (N1 (_, _)) in reduce_scrutinee as [].
-        -- apply N0 in scrutinee_reduced as [].
-        -- destruct not_yet_safe_to_match as [NS | NS]; apply NS. { exact MC. } exact US.
+        -- destruct (@Unshadow.well_formed_in_spec (Term.App (Term.Cas pattern function1 function2) argument) (Map.domain context)).
+           ++ eapply Unshadow.neg. exact C.
+           ++ discriminate E.
+           ++ apply Unshadow.neg in C. apply N0 in C as [].
+      * intros [c' t'] C. simpl fst in *. simpl snd in *. invert C. { apply (N (_, _)) in reduce_function as []. }
+        -- destruct E as [E | E]. { apply Match.compatible_iff in compatible_names. rewrite compatible_names in E. discriminate E. }
+           eassert (Ed : Map.Eq domain $ Map.domain context). {
+             eapply Map.domain_det. { exact context_domain. } { apply Map.eq_refl. } apply Map.domain_domain. }
+           destruct (@Unshadow.well_formed_in_spec (Term.App (Term.Cas pattern t' function2) argument) (Map.domain context)).
+           ++ eapply Unshadow.neg. eapply Unshadow.eq. { exact unshadowed. } { exact Ed. } reflexivity.
+           ++ discriminate E.
+           ++ apply N0. apply Unshadow.neg. eapply Unshadow.eq. { exact unshadowed. } { exact Ed. } reflexivity.
+        -- destruct E as [E | E]. { apply Match.compatible_iff in compatible_names. rewrite compatible_names in E. discriminate E. }
+           eassert (Ed : Map.Eq domain $ Map.domain context). {
+             eapply Map.domain_det. { exact context_domain. } { apply Map.eq_refl. } apply Map.domain_domain. }
+           destruct (@Unshadow.well_formed_in_spec (Term.App (Term.Cas pattern function1 function2) argument) (Map.domain context)).
+           ++ eapply Unshadow.neg. eapply Unshadow.eq. { exact unshadowed. } { exact Ed. } reflexivity.
+           ++ discriminate E.
+           ++ apply N0. apply Unshadow.neg. eapply Unshadow.eq. { exact unshadowed. } { exact Ed. } reflexivity.
+        -- destruct E as [E | E]. { apply Match.compatible_iff in compatible_names. rewrite compatible_names in E. discriminate E. }
+           eassert (Ed : Map.Eq domain $ Map.domain context). {
+             eapply Map.domain_det. { exact context_domain. } { apply Map.eq_refl. } apply Map.domain_domain. }
+           destruct (@Unshadow.well_formed_in_spec (Term.App (Term.Cas pattern function1 function2) argument) (Map.domain context)).
+           ++ eapply Unshadow.neg. eapply Unshadow.eq. { exact unshadowed. } { exact Ed. } reflexivity.
+           ++ discriminate E.
+           ++ apply N0. apply Unshadow.neg. eapply Unshadow.eq. { exact unshadowed. } { exact Ed. } reflexivity.
+        -- erewrite Unshadow.det_reserve in rename. { rewrite rename in Eu. discriminate Eu. } 2: { reflexivity. }
+           eapply Map.domain_det. { exact D. } { apply Map.eq_refl. } apply Map.domain_domain.
   - destruct H as [[updated_context_without_self stepped] |].
     + destruct (Map.find_spec updated_context_without_self self); constructor; cbn in *.
       * intros [c t] S. cbn in *. invert S. apply not_overwriting_self.
@@ -193,3 +226,4 @@ Definition dec context term : step_or_not context term. Proof.
 Defined.
 
 Extract Inlined Constant dec => "step".
+*)

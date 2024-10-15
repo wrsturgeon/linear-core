@@ -582,26 +582,115 @@ Proof. exact (Reflect.bool_iff (compatible_spec _ _)). Qed.
 
 
 
-Lemma unshadow_strict {scrutinee} (Ut : Unshadow.Unshadowed scrutinee)
-  {context} (Uc : Map.ForAll (fun _ => Unshadow.Unshadowed) context)
+(*
+Lemma unshadow_strict
+  {context scrutinee} (WF : Unshadow.WellFormedInContext context scrutinee)
   {pattern context_with_matches} (M : Strict context pattern scrutinee context_with_matches)
-  : Map.ForAll (fun _ => Unshadow.Unshadowed) context_with_matches.
+  : Unshadow.WellFormedContext context_with_matches.
 Proof.
-  cbn. generalize dependent Uc. generalize dependent Ut. induction M; intros. { eapply Uc. apply E. exact F. }
-  invert Ut. apply A in F as [[-> ->] | F]. { exact Ua. } eapply IHM; eassumption.
+  cbn. generalize dependent WF. induction M; intros; cbn in *.
+  - eapply WF. 2: { apply E. exact F. } intro x. rewrite <- D. eapply Map.in_eq. exact E.
+  - destruct WF as [WFc WFt]. specialize (WFt _ $ Map.domain_domain _). invert WFt.
+    eassert (WF' : _); [| specialize (IHM WF')]. { split. { exact WFc. }
+      intros d' D'. eapply Unshadow.cant_bind_subset; [eapply Unshadow.context_superset; [exact WFf |] |]; intros x [] F'. {
+        apply Map.find_domain in F'. apply D' in F' as [[] F']. exact F'. }
+      eassert (I : Map.In _ _). { exists tt. exact F'. }
+      apply D' in I. eassert (I' : @Map.In unit _ _). 2: { destruct I' as [[] F'']. exact F''. }
+      apply Uf. left. apply Map.in_domain. exact I. }
+    eassert (D' : Map.Domain context_with_function_matches $ Map.set_union _ _); [| specialize (IHM _ D')]. {
+      intro x. rewrite (in_strict M). rewrite <- (BoundIn.strict_iff function_pattern x).
+      rewrite <- (Map.in_domain _ context). symmetry. apply Map.in_overriding_union. }
+    apply A in F as [[-> ->] | F]. {
+      eapply Unshadow.cant_bind_subset; [eapply Unshadow.context_superset; [exact WFa |] |].
+      * intros k [] I. apply Map.find_domain in I. specialize (D k) as [[[] F] _]. 2: { exact F. }
+        destruct (in_strict M k) as [_ IS]. specialize (IS $ or_intror I) as [v F]. exists v. apply A. right. exact F.
+      * intros k [] F. specialize (Ua k) as [_ [[] Ua]]. 2: { exact Ua. } rewrite Map.in_domain.
+        specialize (D k) as [_ D]. eassert (I : Map.In domain k). { eexists. exact F. }
+        clear F. specialize (D I) as [v F]. clear I. apply A in F as [[-> ->] | F].
+        -- admit.
+        -- eassert (IS := in_strict M k).
+
+
+
+    2: { specialize (IHM _ _ F).
+      eapply Unshadow.cant_bind_union; [eapply Unshadow.context_superset; [exact IHM |] | |].
+      * intros x [] I. assert (A' : x = argument_name \/ Map.In context_with_function_matches x). 2: {
+          eassert (I' : @Map.In unit _ _). 2: { destruct I' as [[] F']. exact F'. } apply D.
+          destruct A' as [-> | [y F']]. { exists argument. apply A. left. split; reflexivity. } exists y. apply A. right. exact F'. }
+        unfold Map.Domain in D'; rewrite D'; clear D'. rewrite Map.in_overriding_union. rewrite Map.in_domain.
+        destruct (String.eqb_spec x argument_name); [left | right]. { exact e. }
+        apply Map.union_set in I as [B | I]; [left | right]. { exists tt. exact B. } apply Map.find_domain in I. exact I.
+      * intros x []. split.
+        -- intro F'. eassert (I : Map.In _ _). { exists tt. exact F'. } clear F'. apply D in I as [y F'].
+           apply A in F' as [[-> ->] | F']; [right | left]. { apply Map.find_singleton. split; reflexivity. }
+           apply Map.union_set. eassert (I : Map.In _ _). { exists y. exact F'. }
+           eapply (in_strict M) in I as [B | I]; [left | right]. { apply BoundIn.strict_iff in B as [[] B]. exact B. }
+           apply Map.find_domain. exact I.
+        -- intros FF. eassert (I : @Map.In unit _ _). 2: { destruct I as [[] F']. exact F'. } apply D. destruct FF as [F' | F']. 2: {
+             apply Map.find_singleton in F' as [-> _]. exists argument. apply A. left. split; reflexivity. }
+           destruct (in_strict M x) as [_ [y IS]]. 2: { exists y. apply A. right. exact IS. }
+           apply Map.union_set in F' as [F' | F']; [left | right]. { apply BoundIn.strict_iff. exists tt. exact F'. }
+           apply Map.find_domain in F'. exact F'.
+      * intros x B I. apply Map.in_singleton in I as ->.
+
+
+
+Check Unshadow.unshadow_context_spec.
+Fail "use the above!".
+
+
+
+    apply A in F as [[-> ->] | F]. 2: { eapply IHM. 3: { exact F. } 2: { exact D. }
+    + eapply Unshadow.cant_bind_subset; [eapply Unshadow.context_superset; [eapply IHM |] |].
+      * intros x [] I. apply Map.find_domain in I. eapply or_intror in I. apply (in_strict M) in I as [y F].
+        eassert (I' : @Map.In unit _ _). 2: { destruct I' as [[] F']. exact F'. } apply D. exists y. apply A. right. exact F.
+      * intros x [] F. eassert (I : Map.In _ _). { exists tt. exact F. } clear F. apply D in I as [y F].
+        eassert (I : @Map.In unit _ _). 2: { destruct I as [[] F']. exact F'. } apply Ua. rewrite Map.in_domain.
+        destruct (String.eqb_spec x argument_name). { subst. apply
+        apply A in F as [[-> ->] | F]. 2: { left. assert (IS := in_strict M).
+
+
+
+  invert Ut. apply A in F as [[-> ->] | F].
+  - eapply Unshadow.cant_bind_subset. { exact WFa. }
+    intros x [] F. eassert (I : @Map.In unit _ _). 2: { destruct I as [[] F']. exact F'. }
+    apply Ua. left. exists tt. exact F.
+  - eapply IHM. { exact D. } 2: { exact Uc. } 2: { exact F. } eapply Unshadow.cant_bind_subset. { exact WFf. }
+    intros x [] F'. eassert (I : @Map.In unit _ _). 2: { destruct I as [[] F'']. exact F''. }
+    apply Uf. left. exists tt. exact F'.
 Qed.
 
-Lemma unshadow_strict_ref {scrutinee} (Ut : Unshadow.Unshadowed scrutinee)
-  {context} (Uc : Map.ForAll (fun _ => Unshadow.Unshadowed) context)
+Lemma unshadow_strict_ref {context domain} (D : Map.Domain context domain) {scrutinee} (Ut : Unshadow.WellFormedIn domain scrutinee)
+  (Uc : Map.ForAll (fun _ => Unshadow.WellFormedIn domain) context)
   {pattern cleaved context_with_matches} (M : StrictRef context pattern scrutinee cleaved context_with_matches)
-  : Unshadow.Unshadowed cleaved /\ Map.ForAll (fun _ => Unshadow.Unshadowed) context_with_matches.
+  : Unshadow.WellFormedContext context_with_matches cleaved.
+  {domain_with_matches} (Dm : Map.Domain context_with_matches domain_with_matches)
+  : Unshadow.WellFormedIn domain_with_matches cleaved /\ Map.ForAll (fun _ => Unshadow.WellFormedIn domain_with_matches) context_with_matches.
 Proof.
-  cbn. generalize dependent Uc. generalize dependent Ut. induction M; intros.
+  cbn. generalize dependent Uc. generalize dependent Ut. generalize dependent domain. induction M; intros.
   - split. { constructor. } intros. eapply Uc. apply E. exact F.
-  - invert Ut. specialize (IHM Uf Uc) as [IHt IHc]. split.
-    + constructor; intros. { exact IHt. } { constructor. } 2: { invert Ba. }
-      eapply not_bound_in_cleaved in Bf as []. exact M.
-    + intros. apply A in F as [[-> ->] | F]. { exact Ua. } eapply IHc; eassumption.
+  - invert Ut. specialize (IHM _ D) as [IHt IHc].
+    + eapply Unshadow.cant_bind_subset. { exact WFf. }
+      intros x [] F. eassert (I : @Map.In unit _ _). 2: { destruct I as [[] F']. exact F'. }
+      apply Uf. left. exists tt. exact F.
+    + exact Uc.
+    + split.
+      * econstructor; intros.
+        -- rewrite <- (BoundIn.term_iff (Term.Var argument_name Ownership.Owned) x).
+           rewrite <- (UsedIn.term_iff (Term.Var argument_name Ownership.Owned) x).
+           cbn. repeat rewrite <- Map.in_overriding_union. reflexivity.
+        -- rewrite <- (BoundIn.term_iff function_cleaved x). rewrite <- (UsedIn.term_iff function_cleaved x).
+           repeat rewrite <- Map.in_overriding_union. reflexivity.
+        -- eapply Unshadow.cant_bind_union. { exact IHt. } { apply Map.union_set. }
+           intros. apply Map.in_overriding_union in I as [I | I]. { apply Map.empty_empty in I as []. }
+           apply Map.in_singleton in I as ->. eapply not_bound_in_cleaved in B as []. exact M.
+        -- constructor. apply D.
+
+
+
+        3: { exact IHt. } { constructor. } 2: { invert Ba. }
+        eapply not_bound_in_cleaved in Bf as []. exact M.
+      * intros. apply A in F as [[-> ->] | F]. { exact Ua. } eapply IHc; eassumption.
 Qed.
 
 Lemma unshadow_move_or_reference {scrutinee} (Ut : Unshadow.Unshadowed scrutinee)
@@ -626,6 +715,7 @@ Proof.
   - apply S in F. destruct F as [[-> ->] | F]. { exact Ut. } eapply Uc. exact F.
   - eapply unshadow_move_or_reference. 3: { exact move_or_reference_matched. } { exact Ut. } { exact Uc. } exact F.
 Qed.
+*)
 
 
 

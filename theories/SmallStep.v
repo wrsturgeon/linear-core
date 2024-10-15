@@ -33,8 +33,9 @@ Inductive Step (context : Context.context) : Term.term -> Context.context -> Ter
       : Step context (Term.App function argument) updated_context (Term.App updated_function argument)
   | ApM
       {pattern} (compatible_names : Match.Compatible context pattern)
+      {domain} (context_domain : Map.Domain context domain)
       {scrutinee body_if_match other_cases} (unshadowed
-        : Unshadow.Unshadowed $ Term.App (Term.Cas pattern body_if_match other_cases) scrutinee)
+        : Unshadow.WellFormedIn domain $ Term.App (Term.Cas pattern body_if_match other_cases) scrutinee)
       {context_with_matches} (matched
         : Match.Pattern context pattern scrutinee context_with_matches)
       : Step context
@@ -42,8 +43,9 @@ Inductive Step (context : Context.context) : Term.term -> Context.context -> Ter
         context_with_matches body_if_match
   | ApS
       {pattern} (compatible_names : Match.Compatible context pattern)
+      {domain} (context_domain : Map.Domain context domain)
       {scrutinee body_if_match other_cases} (unshadowed
-        : Unshadow.Unshadowed $ Term.App (Term.Cas pattern body_if_match other_cases) scrutinee)
+        : Unshadow.WellFormedIn domain $ Term.App (Term.Cas pattern body_if_match other_cases) scrutinee)
       (no_match : forall context_with_matches (M : Match.Pattern context pattern scrutinee context_with_matches), False)
       {updated_context reduced_scrutinee} (reduce_scrutinee : Step context scrutinee updated_context reduced_scrutinee)
       : Step context
@@ -52,8 +54,9 @@ Inductive Step (context : Context.context) : Term.term -> Context.context -> Ter
         (Term.App (Term.Cas pattern body_if_match other_cases) reduced_scrutinee)
   | ApN
       {pattern} (compatible_names : Match.Compatible context pattern)
+      {domain} (context_domain : Map.Domain context domain)
       {scrutinee body_if_match other_cases} (unshadowed
-        : Unshadow.Unshadowed $ Term.App (Term.Cas pattern body_if_match other_cases) scrutinee)
+        : Unshadow.WellFormedIn domain $ Term.App (Term.Cas pattern body_if_match other_cases) scrutinee)
       (no_match : forall context_with_matches (M : Match.Pattern context pattern scrutinee context_with_matches), False)
       {shape} (scrutinee_reduced : Shape.ShapeOrRef context scrutinee shape)
       {unchanged_context} (context_unchanged : Map.Eq context unchanged_context)
@@ -61,8 +64,9 @@ Inductive Step (context : Context.context) : Term.term -> Context.context -> Ter
         (Term.App (Term.Cas pattern body_if_match other_cases) scrutinee) unchanged_context
         (Term.App other_cases scrutinee)
   | ApR
+      {domain} (context_domain : Map.Domain context domain)
       {pattern scrutinee body_if_match other_cases} (not_yet_safe_to_match
-        : ~Match.Compatible context pattern \/ ~Unshadow.Unshadowed $ Term.App (Term.Cas pattern body_if_match other_cases) scrutinee)
+        : ~Match.Compatible context pattern \/ ~Unshadow.WellFormedIn domain $ Term.App (Term.Cas pattern body_if_match other_cases) scrutinee)
       {context_domain} (D : Map.Domain context context_domain)
       {renamed} (rename : Unshadow.unshadow_reserve context_domain
         (Term.App (Term.Cas pattern body_if_match other_cases) scrutinee) = Some renamed)
@@ -95,18 +99,21 @@ Proof.
     + exact not_overwriting_self.
     + cbn in *. intros x y. rewrite <- Ec'. apply update.
   - apply ApF. apply IHS1. { exact Ec. } exact Ec'.
-  - apply ApM.
+  - eapply ApM.
     + eapply Match.compatible_eq; try reflexivity; eassumption.
+    + eapply Map.domain_eq. { exact context_domain. } { exact Ec. } apply Map.eq_refl.
     + exact unshadowed.
     + eapply Match.pattern_eq; try reflexivity; eassumption.
-  - apply ApS.
+  - eapply ApS.
     + eapply Match.compatible_eq; try reflexivity; eassumption.
+    + eapply Map.domain_eq. { exact context_domain. } { exact Ec. } apply Map.eq_refl.
     + exact unshadowed.
     + intros. eapply no_match. eapply Match.pattern_eq; try reflexivity;
       try eassumption. { apply Map.eq_sym. eassumption. } apply Map.eq_refl.
     + apply IHS1; eassumption.
   - eapply ApN.
     + eapply Match.compatible_eq; try reflexivity; eassumption.
+    + eapply Map.domain_eq. { exact context_domain. } { exact Ec. } apply Map.eq_refl.
     + exact unshadowed.
     + intros. eapply no_match. eapply Match.pattern_eq; try reflexivity;
       try eassumption. { apply Map.eq_sym. eassumption. } apply Map.eq_refl.
@@ -114,6 +121,7 @@ Proof.
     + eapply Map.eq_trans. { apply Map.eq_sym. exact Ec. }
       eapply Map.eq_trans. { exact context_unchanged. } exact Ec'.
   - eapply ApR.
+    + eapply Map.domain_eq. { exact context_domain. } { exact Ec. } apply Map.eq_refl.
     + destruct not_yet_safe_to_match as [N | N]; [left | right]; intro C; apply N. 2: { exact C. }
       eapply Match.compatible_eq. 3: { reflexivity. } { exact C. } apply Map.eq_sym. exact Ec.
     + eapply Map.domain_eq. { exact D. } { exact Ec. } apply Map.eq_refl.
@@ -175,8 +183,9 @@ Proof.
       eapply Match.pattern_eq; try reflexivity; try eassumption; apply Map.eq_refl.
     + contradiction (no_match context_with_matches).
       eapply Match.pattern_eq; try reflexivity; try eassumption; apply Map.eq_refl.
-    + destruct not_yet_safe_to_match as [N | N]. 2: { apply N in unshadowed as []. }
-      contradiction N. eapply Match.compatible_eq; try reflexivity; eassumption.
+    + destruct not_yet_safe_to_match as [N | N]; contradiction N. { eapply Match.compatible_eq; try reflexivity; eassumption. }
+      eapply Unshadow.eq. { exact unshadowed. } 2: { reflexivity. }
+      eapply Map.domain_det. { exact context_domain. } { exact Ec. } exact context_domain0.
   - invert S2.
     + eapply shapes_cant_step in reduce_function as []. constructor.
     + contradiction (no_match c2'). eapply Match.pattern_eq; try reflexivity; try eassumption. 2: { apply Map.eq_refl. }
@@ -185,8 +194,9 @@ Proof.
       split. { exact Ec'. } reflexivity.
     + eapply shape_or_ref_cant_step in scrutinee_reduced as [].
       eapply eq. { exact S1. } { exact Ec. } { reflexivity. } { apply Map.eq_refl. } reflexivity.
-    + destruct not_yet_safe_to_match as [N | N]. 2: { apply N in unshadowed as []. }
-      contradiction N. eapply Match.compatible_eq; try reflexivity; eassumption.
+    + destruct not_yet_safe_to_match as [N | N]; contradiction N. { eapply Match.compatible_eq; try reflexivity; eassumption. }
+      eapply Unshadow.eq. { exact unshadowed. } 2: { reflexivity. }
+      eapply Map.domain_det. { exact context_domain. } { exact Ec. } exact context_domain0.
   - invert S2.
     + eapply shapes_cant_step in reduce_function as []. constructor.
     + contradiction (no_match c2'). eapply Match.pattern_eq; try reflexivity; try eassumption. 2: { apply Map.eq_refl. }
@@ -195,16 +205,23 @@ Proof.
       eapply eq. { exact reduce_scrutinee. } { apply Map.eq_sym. exact Ec. } { reflexivity. } { apply Map.eq_refl. } reflexivity.
     + split. 2: { reflexivity. } eapply Map.eq_trans. { apply Map.eq_sym. exact context_unchanged. }
       eapply Map.eq_trans. { exact Ec. } exact context_unchanged0.
-    + destruct not_yet_safe_to_match as [N | N]. 2: { apply N in unshadowed as []. }
-      contradiction N. eapply Match.compatible_eq; try reflexivity; eassumption.
+    + destruct not_yet_safe_to_match as [N | N]; contradiction N. { eapply Match.compatible_eq; try reflexivity; eassumption. }
+      eapply Unshadow.eq. { exact unshadowed. } 2: { reflexivity. }
+      eapply Map.domain_det. { exact context_domain. } { exact Ec. } exact context_domain0.
   - invert S2.
     + eapply shapes_cant_step in reduce_function as []. constructor.
-    + destruct not_yet_safe_to_match as [N | N]. 2: { apply N in unshadowed as []. }
-      contradiction N. eapply Match.compatible_eq; try reflexivity; try eassumption. apply Map.eq_sym. assumption.
-    + destruct not_yet_safe_to_match as [N | N]. 2: { apply N in unshadowed as []. }
-      contradiction N. eapply Match.compatible_eq; try reflexivity; try eassumption. apply Map.eq_sym. assumption.
-    + destruct not_yet_safe_to_match as [N | N]. 2: { apply N in unshadowed as []. }
-      contradiction N. eapply Match.compatible_eq; try reflexivity; try eassumption. apply Map.eq_sym. assumption.
+    + destruct not_yet_safe_to_match as [N | N]; contradiction N; clear N.
+      * eapply Match.compatible_eq; try reflexivity; try eassumption. apply Map.eq_sym. assumption.
+      * eapply Unshadow.eq. { exact unshadowed. } 2: { reflexivity. }
+        eapply Map.domain_det. { exact context_domain1. } { apply Map.eq_sym. exact Ec. } exact context_domain.
+    + destruct not_yet_safe_to_match as [N | N]; contradiction N; clear N.
+      * eapply Match.compatible_eq; try reflexivity; try eassumption. apply Map.eq_sym. assumption.
+      * eapply Unshadow.eq. { exact unshadowed. } 2: { reflexivity. }
+        eapply Map.domain_det. { exact context_domain1. } { apply Map.eq_sym. exact Ec. } exact context_domain.
+    + destruct not_yet_safe_to_match as [N | N]; contradiction N; clear N.
+      * eapply Match.compatible_eq; try reflexivity; try eassumption. apply Map.eq_sym. assumption.
+      * eapply Unshadow.eq. { exact unshadowed. } 2: { reflexivity. }
+        eapply Map.domain_det. { exact context_domain1. } { apply Map.eq_sym. exact Ec. } exact context_domain.
     + split. { eapply Map.eq_trans. { apply Map.eq_sym. exact context_unchanged. }
         eapply Map.eq_trans. { exact Ec. } exact context_unchanged0. }
       assert (Ed := Map.domain_det D Ec D0).
@@ -259,8 +276,8 @@ Proof.
       eapply UsedIn.indirect_superset. { exact transitive. } intros k'' v'' F''. apply R in F'' as [F'' N''].
       apply remove_self_from_context. split. { exact F''. } exact N''.
   - destruct (Map.in_spec (UsedIn.indirect updated_context argument) k); [apply UsedIn.IApA | apply UsedIn.IApF]. {
-      apply UsedIn.indirect_spec. exact Y. } rename N into Ni. assert (N : ~UsedIn.Indirect updated_context argument k). {
-      intro B. apply Ni. apply UsedIn.indirect_spec. exact B. } clear Ni.
+      apply UsedIn.indirect_iff. exact Y. } rename N into Ni. assert (N : ~UsedIn.Indirect updated_context argument k). {
+      intro B. apply Ni. apply UsedIn.indirect_iff. exact B. } clear Ni.
     eapply IHS; clear IHS. 2: { exact F. } intros k' v' F'. specialize (AU _ _ F').
     invert AU. { exact used_in_function. } Abort. (* This case should be true with 90% certainty, but this might be a dead end *)
     (* I'm pretty sure that this is straight-up not true in most of the following cases *)

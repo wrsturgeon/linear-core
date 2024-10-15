@@ -27,18 +27,6 @@ Inductive Interpret context term : Context.context -> Term.term -> Prop :=
 
 
 
-Definition penalty_for_incompatible_match context t :=
-  match t with
-  | Term.App function argument =>
-      match function with
-      | Term.Cas pattern body_if_match other_cases =>
-          let clean := andb (Match.compatible context pattern) $ Unshadow.unshadowed $ Term.App function argument in
-          if clean then 0 else 1
-      | _ => 0
-      end
-  | _ => 0
-  end.
-
 Instance wf : Classes.WellFounded $ Telescopes.tele_measure
   (Telescopes.ext Context.context (fun _ => Telescopes.tip Term.term)) nat
     (fun context term => (* penalty_for_incompatible_match context term + *) Term.nodes term +

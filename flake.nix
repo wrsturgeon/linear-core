@@ -217,7 +217,7 @@
                         Linear_core.Term.Cas (
                           Linear_core.Pattern.Nam "x",
                           mov "x",
-                          mov "x")),
+                          err)),
                       Linear_core.Term.App (
                         Linear_core.Term.Cas (
                           Linear_core.Pattern.Nam "x",

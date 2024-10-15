@@ -129,7 +129,7 @@ Qed.
 Lemma unfold_new_name reserved orig_name
   : new_name reserved orig_name = if Map.in_ reserved orig_name then new_name reserved $ next orig_name else orig_name.
 Proof.
-  funelim (new_name reserved orig_name); cbn in *.
+  unfold Map.in_. funelim (new_name reserved orig_name); cbn in *.
   - repeat rewrite Heqcall in *. assert (tmp := Y). apply Map.find_iff in tmp as ->. reflexivity.
   - destruct (Map.find_spec reserved orig_name). { apply N in Y as []. } reflexivity.
 Qed.
@@ -144,6 +144,10 @@ Proof.
   specialize (H _ E). rewrite (unfold_new_name r2). assert (F := Y). apply E in F.
   unfold Map.in_. apply Map.find_iff in F as ->. apply H.
 Qed.
+
+Lemma new_name_id {reserved name} (N : ~Map.In reserved name)
+  : new_name reserved name = name.
+Proof. rewrite unfold_new_name. destruct (Map.in_spec reserved name). 2: { reflexivity. } apply N in Y as []. Qed.
 
 
 
@@ -184,6 +188,35 @@ Lemma in_generate reserved names k
 Proof.
   unfold generate. rewrite in_generate_acc. split. 2: { intro I. left. exact I. }
   intros [I | I]. { exact I. } destruct I as [v F]. invert F.
+Qed.
+
+Lemma in_right {reserved : Map.set} {acc : Map.to string} {tail : list (string * unit)} {k : string} {v : string}
+  (F : Map.Find (List.fold_right (fun kv (x : Map.to string) =>
+    Map.overriding_add (fst kv) (new_name (Map.overriding_union reserved
+      (Map.fold (fun (_ v : string) (acc' : Map.set) => Map.overriding_add v tt acc') Map.empty x))
+      (fst kv)) x) acc tail) k v)
+  : Map.Find acc k v \/ SetoidList.InA MapCore.eq_key (k, tt) tail.
+Proof.
+  generalize dependent v. generalize dependent k. generalize dependent acc. generalize dependent reserved.
+  induction tail as [| [x y] tail IH]; intros; cbn in *. { left. exact F. }
+  apply Map.overwrite_if_present_overwrite in F as [[-> ->] | [N F]]. { right. left. reflexivity. }
+  edestruct IH as [IH' | IH']; clear IH; [| left | right]. { exact F. } { exact IH'. } right. exact IH'.
+Qed.
+
+Lemma in_range_generate_acc {acc} (O2O : Map.OneToOne acc) {x y} (F : Map.Find acc x y) {names} (N : ~Map.In names x) reserved
+  : Map.InRange (generate_acc acc reserved names) y.
+Proof.
+  unfold generate_acc. unfold Map.fold. rewrite MapCore.fold_spec. rewrite <- List.fold_left_rev_right.
+  assert (N' : ~SetoidList.InA MapCore.eq_key_elt (x, tt) $ List.rev (MapCore.bindings names)). {
+    intro I. apply N. eexists. apply MapCore.bindings_spec1. apply SetoidList.InA_rev. exact I. } clear N. rename N' into N.
+  assert (ND := MapCore.bindings_spec2w names). apply SetoidList.NoDupA_rev in ND.
+  remember (List.rev (MapCore.bindings names)) as b eqn:Eb; clear names Eb.
+  generalize dependent reserved. generalize dependent y. generalize dependent x. generalize dependent acc.
+  induction ND as [| [k []] tail N ND IH]; intros; cbn in *. { exists x. exact F. }
+  edestruct IH as [x' IH']; clear IH; try eassumption. 3: { exact Map.eq_key_equiv. } { intro I. apply N0. right. exact I. }
+  eexists. apply Map.overwrite_if_present_overwrite. right. split. 2: { exact IH'. }
+  intros ->. apply in_right in IH' as [IH | IH]. 2: { apply N in IH as []. }
+  specialize (O2O _ _ F _ IH) as ->. apply N0. left. split; reflexivity.
 Qed.
 
 Lemma not_in_generate_acc
@@ -254,3 +287,70 @@ Qed.
 Theorem one_to_one_generate reserved names
   : Map.OneToOne (generate reserved names).
 Proof. apply one_to_one_generate_acc. apply Map.one_to_one_empty. Qed.
+
+(*
+Lemma in_acc_right {acc k v} (F : Map.Find acc k v) reserved tail
+  : Map.Find (List.fold_right (fun (kv : string * unit) (x : Map.to string) => Map.overriding_add (fst kv)
+      (new_name (Map.overriding_union reserved (Map.fold (fun (_ v : string) (acc' : Map.to unit) =>
+        Map.overriding_add v tt acc') Map.empty x)) (fst kv)) x) acc tail) k v.
+Proof.
+  generalize dependent reserved. generalize dependent v. generalize dependent k. generalize dependent acc.
+  induction tail as [| [kt vt] tail IH]; intros; cbn in *. { exact F. } apply Map.overwrite_if_present_overwrite.
+  destruct (String.eqb_spec k kt); [left | right]. 2: { split. { exact n. } eapply IH. exact F. }
+  split. { exact e. } subst. TODO.
+*)
+
+(* NOTE: we can't claim that `k` maps to itself, since `k` could have been mapped to earlier
+ * e.g. `k` is "x'", there's an "x" in the domain, and "x" is reserved, so "x" maps to "x'" and "x'" maps to "x''"
+ * ...but we can claim that it's always in the range, no matter what its corresponding key may be *)
+Lemma range_generate_acc {reserved x} (N : ~Map.In reserved x) {names} (I : Map.In names x)
+  {acc} (O2O : Map.OneToOne acc) (D : Map.Disjoint names acc)
+  : Map.InRange (generate_acc acc reserved names) x.
+Proof.
+  (* INFORMAL PROOF: *)
+  (* Note that `new_name` maps anything not in `reserved` to itself.
+   * Note further that `generate_acc` just repeatedly calls `new_name` and adds the *result* (not the original key) to `reserved`.
+   * So, at some point in `names`, we get to `x` (by assumption `I`).
+   * Either before that point, `x` has been mapped to, and then we're done (since anything already mapped will stay mapped),
+   * or `x` has not been mapped to, in which case it can't be in `reserved` (since it's not in the original either),
+   * and `new_names` will map it to itself, in which case we're also done. *)
+
+  (* See if we're already done: *) destruct (Map.in_range_spec acc x) as [[z F] |]. {
+    eapply in_range_generate_acc. { exact O2O. } { exact F. } intro C. eapply D. { exact C. } eexists. exact F. }
+
+  (* To formalize the notion of "at some point in `names`, we get to `x`," induction on the bindings in `names`: *)
+  unfold generate_acc. unfold Map.fold. rewrite MapCore.fold_spec. destruct I as [[] F]. apply MapCore.bindings_spec1 in F.
+  (* But `fold_left` is a pain in the ass, and it can be trivially converted to `fold_right` by reversing the list: *)
+  rewrite <- List.fold_left_rev_right. apply SetoidList.InA_rev in F. assert (ND := MapCore.bindings_spec2w names).
+  (* And doing so changes nothing about our assumptions: *)
+  apply SetoidList.NoDupA_rev in ND. 2: { exact Map.eq_key_equiv. }
+  assert (D' : forall x (Ia : Map.In acc x) (In : SetoidList.InA MapCore.eq_key_elt (x, tt) $ List.rev (MapCore.bindings names)), False). {
+    intros z Ia In. eapply D. 2: { exact Ia. } apply -> SetoidList.InA_rev in In.
+    apply MapCore.bindings_spec1 in In. exists tt. exact In. } clear D. rename D' into D.
+  remember (List.rev (MapCore.bindings names)) as b eqn:Eb; clear names Eb.
+  (* OK, actual induction now: *)
+  generalize dependent acc. generalize dependent x. generalize dependent reserved.
+  induction ND as [| [k []] tail NI ND IH]; intros; cbn in *. { (* Base case is easy: *) invert F. }
+  (* Either this is the point in `names` where we encounter `x`, or it's somewhere down the line: *) invert F. 2: {
+    (* Inductive case (down the line) should be easy: *)
+    edestruct IH as [k' IH']; try eassumption. { intros z Ia In. eapply D. { exact Ia. } right. exact In. }
+    clear IH. eexists. apply Map.overwrite_if_present_overwrite. right.
+    split. 2: { exact IH'. } intros ->. apply in_right in IH' as [F | F]. 2: { apply NI in F as []. }
+    eapply D. { eexists. exact F. } left. split; reflexivity. }
+  (* Now the case in which we hit `x`: *)
+  clear IH. destruct H0 as [Ek Ev]. cbn in *. subst. clear Ev.
+  destruct (Map.in_range_spec (List.fold_right (fun kv s => Map.overriding_add (fst kv) (new_name (Map.overriding_union reserved $
+    Map.fold (fun _ v acc => Map.overriding_add v tt acc) Map.empty s) $ fst kv) s) acc tail) k). {
+    destruct Y as [j F]. eexists. apply Map.overwrite_if_present_overwrite. right. split. 2: { exact F. }
+    intros ->. apply in_right in F as [F | F]. { apply N0. eexists. exact F. } apply NI in F as []. }
+  eexists. apply Map.overwrite_if_present_overwrite. left. split. { reflexivity. }
+  symmetry. apply new_name_id. intro I. apply Map.in_overriding_union in I as [I | I]. { apply N in I as []. }
+  apply Map.in_range in I. apply N1 in I as [].
+Qed.
+
+Lemma range_generate {reserved x} (N : ~Map.In reserved x) {names} (I : Map.In names x)
+  : Map.InRange (generate reserved names) x.
+Proof.
+  apply range_generate_acc. { exact N. } { exact I. } { apply Map.one_to_one_empty. }
+  intros k In C. apply Map.empty_empty in C as [].
+Qed.

@@ -108,7 +108,7 @@ Proof.
     split. { exact A. } apply Map.remove_if_present_remove.
 Qed.
 
-Lemma strict_reversible {lookup} (O2O : Map.OneToOne lookup) {inverted} (inv : Map.Invert lookup inverted)
+Lemma strict_reversible {lookup} {O2O : Map.OneToOne lookup} {inverted} (inv : Map.Invert lookup inverted)
   (O2OI : Map.OneToOne inverted) strict renamed_strict
   : Strict O2O strict renamed_strict <-> Strict O2OI renamed_strict strict.
 Proof. { split; intro S.
@@ -142,6 +142,14 @@ Proof.
     destruct (String.eqb_spec x argument). { subst. destruct (Map.find_det Fu F). left. }
     invert B. { contradiction n. reflexivity. } right. apply IHR. eexists.
     split. { exact bound_earlier. } apply Ru. split. { exact n. } exact F.
+Qed.
+
+Lemma wf_strict {lookup} {O2O : Map.OneToOne lookup} {strict renamed_strict} (R : Strict O2O strict renamed_strict)
+  : WellFormed.Strict renamed_strict.
+Proof.
+  induction R; constructor. { exact IHR. } intro B. destruct (compatible_if_strict R) as [O2O' [WF S]].
+  apply (bound_in_strict R) in B as [cant_exist [B F]]. destruct rename_argument as [F' R']. apply R' in F as [N F].
+  apply N. eapply O2O. { exact F. } exact F'.
 Qed.
 
 
