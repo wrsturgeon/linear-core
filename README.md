@@ -1,6 +1,8 @@
 # Linear Core
 
-Core semantics for a lazy functional programming language with dependent types and linear resources.
+**In a word:** Purely functional programs that compile and run like low-level code.
+
+**In a few more words:** **Strongly normalizing** **purely functional** semantics with **dependent types**, **linear resources**, and **lazy evaluation**.
 
 At a glance, here's the abstract syntax tree, defined similarly to Backus-Naur form:
 
@@ -102,7 +104,7 @@ Name-binding is essentially a well-behaved substitute for arbitrary pointer addr
 
 ## Context & Substitution
 
-### `TODO`
+### [`Context.v`](/theories/Context.v)
 
 Variables are **linear**: that is, each variable must be moved once and only once.
 During execution, until a variable is moved, references can view its structure arbitrarily many times.
