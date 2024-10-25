@@ -45,13 +45,13 @@ Proof.
   split. { intro F. apply N in F as []. } intro D. discriminate D.
 Qed.
 
-Lemma find_dec {T} (m : to T) k
+Definition find_dec {T} (m : to T) k
   : {exists v, Find m k v} + {forall v, ~Find m k v}.
 Proof.
   destruct (find m k) as [v |] eqn:F; [left | right].
   - exists v. apply find_iff. exact F.
   - intros v C. apply find_iff in C. rewrite F in C. discriminate C.
-Qed.
+Defined.
 
 Extract Inlined Constant find_dec => "in_".
 
@@ -62,7 +62,7 @@ Variant found {T} (m : to T) k : Type :=
 
 Extract Inductive found => "option" [ "Some" "None" ].
 
-Lemma found_dec {T} (m : to T) k : found m k. Proof.
+Definition found_dec {T} (m : to T) k : found m k. Proof.
   destruct (find m k) as [v |] eqn:F; [eleft | right]. { apply find_iff. exact F. }
   intros v C. apply find_iff in C. rewrite F in C. discriminate C.
 Defined.
@@ -226,6 +226,11 @@ Qed.
 Lemma in_eq {T} {m1 m2 : to T} (E : Eq m1 m2) x
   : In m1 x <-> In m2 x.
 Proof. split; intros [y F]; eexists; apply E; exact F. Qed.
+
+(* TODO: use `find_tt` across the board, revising earlier acrobatics *)
+Lemma find_tt m k
+  : Find m k tt <-> In m k.
+Proof. split. { intro F. exists tt. exact F. } intros [[] F]. exact F. Qed.
 
 
 
@@ -792,6 +797,31 @@ Qed.
 
 
 
+Definition Range m (r : set) : Prop := forall v, InRange m v <-> In r v.
+Arguments Range m r/.
+
+Lemma range_det {m1} {r1} (R1 : Range m1 r1)
+  {m2} (Em : Eq m1 m2) {r2} (R2 : Range m2 r2)
+  : Eq r1 r2.
+Proof.
+  intros v []. split; intro F.
+  - eassert (I : In _ _). { eexists. exact F. } apply R1 in I as [k F']. apply Em in F'.
+    eassert (IR : InRange _ _). { eexists. exact F'. } apply R2 in IR as [[] F'']. exact F''.
+  - eassert (I : In _ _). { eexists. exact F. } apply R2 in I as [k F']. apply Em in F'.
+    eassert (IR : InRange _ _). { eexists. exact F'. } apply R1 in IR as [[] F'']. exact F''.
+Qed.
+
+Lemma range_eq {m1} {r1} (R1 : Range m1 r1)
+  {m2} (Em : Eq m1 m2) {r2} (Er : Eq r1 r2)
+  : Range m2 r2.
+Proof.
+  split.
+  - intros [k F]. eapply in_eq. { apply eq_sym. exact Er. } apply R1. eexists. apply Em. exact F.
+  - intro I. eapply in_eq in I. 2: { exact Er. } apply R1 in I as [k F]. eexists. apply Em. exact F.
+Qed.
+
+
+
 Definition fold {X Y} (f : String.string -> X -> Y -> Y) (acc : Y) (m : to X) : Y := @MapCore.fold X Y f m acc.
 Arguments fold {X Y} f acc m : simpl never.
 
@@ -831,6 +861,33 @@ Proof.
   split.
   - intros [y F]. apply minus_minus in F as [F N]. split. { exists y. exact F. } exact N.
   - intros [[y F] N]. exists y. apply minus_minus. split. { exact F. } exact N.
+Qed.
+
+
+
+Definition Intersection {T} (a b : to T) (output : to T) : Prop :=
+  forall k v, Find output k v <-> (Find a k v /\ Find b k v).
+Arguments Intersection {T} a b output/.
+
+Definition intersection {T} eqb a : to T -> to T := MapCore.filter (fun k v => maps_to eqb a k v).
+Arguments intersection {T} eqb a b.
+
+Lemma intersection_intersection {T eqb} (eqb_spec : forall a b : T, Reflect.Bool (a = b) $ eqb a b) (a : to T) b
+  : Intersection a b (intersection eqb a b).
+Proof.
+  cbn. intros. unfold intersection. unfold Find. rewrite <- (MapCore.bindings_spec1 $ MapCore.filter _ _).
+  rewrite MapCore.filter_spec. rewrite <- (MapCore.bindings_spec1 b). remember (MapCore.bindings b) as bs eqn:Eb; clear b Eb.
+  generalize dependent v. generalize dependent k. generalize dependent a. generalize dependent eqb.
+  induction bs as [| [k v] tail IH]; intros; cbn in *. { split. { intro C. invert C. } intros [_ C]. invert C. }
+  specialize (IH eqb eqb_spec). fold (maps_to eqb a k v). destruct (maps_to_spec eqb_spec a k v); cbn in *.
+  - split.
+    + intro I. invert I. { destruct H0; cbn in *; subst. split. { exact Y. } left. split; reflexivity. }
+      apply IH in H0 as [M I]. split. { exact M. } right. exact I.
+    + intros [M I]. invert I; [left | right]. { destruct H0; cbn in *; subst. split; reflexivity. }
+      apply IH. split. { exact M. } exact H0.
+  - split.
+    + intro I. apply IH in I as [M I]. split. { exact M. } right. exact I.
+    + intros [M I]. invert I. { destruct H0; cbn in *; subst. apply N in M as []. } apply IH. split. { exact M. } exact H0.
 Qed.
 
 
@@ -1313,13 +1370,43 @@ Proof.
   intro I. right. exact I.
 Qed.
 
-Lemma in_range m k
+Lemma in_space_range m k
   : In (range m) k <-> InRange m k.
 Proof. rewrite <- (find_range m k tt). split; [intros [[] F] | intro F; exists tt]; exact F. Qed.
 
-Lemma in_range_spec m k
-  : Reflect.Bool (InRange m k) (in_ (range m) k).
-Proof. destruct (in_spec (range m) k); constructor. { apply in_range. exact Y. } intro I. apply N. apply in_range. exact I. Qed.
+
+
+Definition in_range m v :=
+  Map.any (fun x y => String.eqb v y) m.
+
+Lemma in_range_spec m v
+  : Reflect.Bool (InRange m v) $ in_range m v.
+Proof.
+  eapply Reflect.bool_eq. 2: { eapply (@any_spec _ _ $ fun _ => String.eqb v). intro. apply OrderedString.eq_spec. }
+  cbn. split; intros [k F]; exists k. { exists v. split. { exact F. } reflexivity. } destruct F as [v' [F <-]]. exact F.
+Qed.
+
+Lemma in_range_iff m v
+  : InRange m v <-> in_range m v = true.
+Proof. exact (Reflect.bool_iff $ @in_range_spec m v). Qed.
+
+Variant found_in_range (m : to String.string) v : Type :=
+  | FoundInRange (Y : InRange m v)
+  | NotFoundInRange (N : forall (I : InRange m v), False)
+  .
+Arguments FoundInRange {m v Y}.
+Arguments NotFoundInRange {m v N}.
+
+Extract Inductive found_in_range => "bool" [ "true" "false" ].
+
+Definition in_range_dec m v
+  : found_in_range m v.
+Proof.
+  destruct (in_range m v) eqn:E; [left | right]. { apply in_range_iff. exact E. }
+  intro I. apply in_range_iff in I. rewrite I in E. discriminate E.
+Defined.
+
+Extract Inlined Constant in_range_dec => "in_range".
 
 
 

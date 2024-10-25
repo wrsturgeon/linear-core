@@ -4,6 +4,12 @@ From Coq Require
 From Coq Require Import
   extraction.Extraction
   .
+From LinearCore Require
+  Reflect
+  .
+From LinearCore Require Import
+  DollarSign
+  .
 
 
 
@@ -81,3 +87,7 @@ Proof. destruct (String.eqb_spec x y); [left | right]; assumption. Qed.
 
 Extract Constant eq_dec => "(=)".
 Extraction NoInline eq_dec.
+
+Lemma eq_spec x y
+  : Reflect.Bool (x = y) $ String.eqb x y.
+Proof. destruct (String.eqb_spec x y); constructor; assumption. Qed.
