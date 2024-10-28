@@ -28,6 +28,15 @@ The language guarantees a few great properties for anything written in it:
     Since types and values are on in the same, we first try to compute `size` at compile time;
     if we succeed, we can elide the `size` field entirely and allocate `data` on the stack,
     and if we can't, we wait until we receive `size` and allocate `data` at runtime.
+- **Sigma types:** Write types that require a property to hold.
+  - For example, a function called `sort` should require that its return type is sorted.
+    Rather than having to write a test manually, you can use a dependent type (above)
+    to require that a value is sorted. (In the fully-fledged programming language,
+    any universally quantified property is automatically checked via property-based testing.)
+    Furthermore, some functions (e.g. binary search) work only if their argument is sorted.
+    In those cases, you can straightforwardly require that
+    any argument is statically guaranteed to be sorted,
+    and the type system enforces this constraint at compile time.
 - **Strong normalization:** Every computation terminates. No infinite loops.
   - In almost every programming language (and all popular ones),
     an accidental bug--even in someone else's library--can stop your code by looping forever.
