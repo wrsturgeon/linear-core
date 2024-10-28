@@ -22,7 +22,7 @@ The language guarantees a few great properties for anything written in it:
     and the compiler will automatically check the correctness of any messages constructed.
     For example, if Rust supported this design, it might look something like this:
     ```rust
-    struct msg { size: usize, data: [u8; size] }
+    struct msg { size: u16, data: [u8; size] }
     ```
     Note that the _type_ of `data` depends on the _value_ of `size`.
     Since types and values are on in the same, we first try to compute `size` at compile time;
