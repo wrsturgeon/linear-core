@@ -3,7 +3,7 @@
 **In a word:** Purely functional programs that compile and run like low-level code.
 
 The language guarantees a few great properties for anything written in it:
-- **Copmile-time evaluation:** Everything that _can_ be evaluated at compile time _will_.
+- **Compile-time evaluation:** Everything that _can_ be evaluated at compile time _will_.
   - Many languages offer a small subset that can run at compile time: for example, C++'s `constexpr` or Rust's `const`.
     However, their designs prevent any non-trival compile-time evaluation _a priori_:
     everyone agress that a compiler should always finish and always spit out the same program, but
